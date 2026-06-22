@@ -93,6 +93,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .empty-sessions { display: grid; grid-template-columns: 92px minmax(0,1fr) auto; align-items: center; gap: 24px; margin-top: 20px; padding: 25px; border: 1px dashed rgba(208,220,212,.12); border-radius: 12px; background: rgba(255,255,255,.014); }
 .empty-visual { position: relative; width: 92px; height: 72px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(105,207,151,.1); border-radius: 9px; color: #71d09d; background: rgba(105,207,151,.035); font-size: 17px; }.empty-visual i { position: absolute; width: 45px; height: 1px; background: rgba(105,207,151,.12); transform: rotate(35deg); }.empty-visual i:last-child { transform: rotate(-35deg); }
 .empty-sessions h3 { margin: 6px 0; font-size: 17px; font-weight: 620; letter-spacing: -.025em; }.empty-sessions p:not(.kicker) { max-width: 530px; margin: 0; color: #718178; font-size: 10px; line-height: 1.55; }
+.landing-footer { width: min(1240px, calc(100% - 48px)); display: flex; align-items: center; justify-content: space-between; gap: 25px; margin: 0 auto; padding: 24px 0 30px; border-top: 1px solid rgba(208,220,212,.08); color: #74847b; }
+.footer-brand { display: flex; align-items: center; gap: 9px; }.footer-mark { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid rgba(105,207,151,.15); border-radius: 7px; color: #72d19e; background: rgba(105,207,151,.045); font: italic 11px Georgia,serif; }.footer-brand strong,.footer-brand small { display: block; }.footer-brand strong { color: #aebdb5; font-size: 11px; letter-spacing: -.01em; }.footer-brand small { margin-top: 2px; color: #5f6e65; font-size: 8px; }
+.footer-contact { display: flex; align-items: center; gap: 12px; font-size: 9px; }.footer-contact span { color: #59685f; text-transform: uppercase; letter-spacing: .12em; }.footer-contact a { color: #9badA3; text-decoration: none; }.footer-contact a:hover { color: #73d49f; }
 
 .workspace-view { position: fixed; z-index: 1; inset: 0; width: 100%; height: 100%; min-height: 100dvh; overflow: hidden; color: #e7efe8; background:
   radial-gradient(circle at top left, rgba(47, 118, 86, .18), transparent 28%),
@@ -261,4 +264,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .empty-sessions { grid-template-columns: 1fr; gap: 18px; padding: 20px; }
   .empty-visual { width: 100%; height: 90px; }
   .empty-sessions .button { width: 100%; }
+  .landing-footer { width: calc(100% - 28px); align-items: flex-start; flex-direction: column; padding-bottom: 24px; }
+  .footer-contact { width: 100%; justify-content: space-between; }
 }
