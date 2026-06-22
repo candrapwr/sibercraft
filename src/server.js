@@ -12,7 +12,7 @@ const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
 const activeRuns = new Map();
 const previewDrafts = new Map();
-const MAX_IMAGE_BYTES = 500_000;
+const MAX_IMAGE_BYTES = 1_000_000;
 const MAX_TOTAL_IMAGE_BYTES = MAX_IMAGE_BYTES * 4;
 await store.init();
 
@@ -321,9 +321,9 @@ function parseImagePayloads(value) {
     const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([a-z0-9+/=]+)$/i.exec(dataUrl);
     if (!match) throw new HttpError(400, "Format gambar tidak didukung");
     const buffer = Buffer.from(match[2], "base64");
-    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) throw new HttpError(413, "Ukuran setiap gambar maksimal 500 KB");
+    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) throw new HttpError(413, "Ukuran setiap gambar maksimal 1 MB");
     totalSize += buffer.length;
-    if (totalSize > MAX_TOTAL_IMAGE_BYTES) throw new HttpError(413, "Total gambar maksimal 2 MB per turn");
+    if (totalSize > MAX_TOTAL_IMAGE_BYTES) throw new HttpError(413, "Total gambar maksimal 4 MB per turn");
     return { name, type: match[1].toLowerCase(), dataUrl, buffer };
   });
 }

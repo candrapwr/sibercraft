@@ -1,6 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const MAX_IMAGE_BYTES = 500_000;
+const MAX_IMAGE_BYTES = 1_000_000;
 
 const state = {
   config: null,
@@ -369,7 +369,7 @@ async function addPendingImages(fileList) {
       continue;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      notify(`${file.name} melebihi batas 500 KB`, true);
+      notify(`${file.name} melebihi batas 1 MB`, true);
       continue;
     }
     state.pendingImages.push({
