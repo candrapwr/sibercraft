@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>SiberCraft — AI Mockup Workspace</title>
+  <link rel="stylesheet" href="/styles.css?n=19">
+</head>
+<body>
+  <section id="sessionsView" class="sessions-view">
+    <header class="landing-nav">
+      <a class="brand" href="#" aria-label="SiberCraft home"><span class="brand-mark">S</span><span>SiberCraft</span></a>
+      <div class="nav-actions">
+        <span id="aiStatus" class="status-pill"><i></i><span>Memeriksa AI</span></span>
+        <button id="openCreateButton" class="button button-dark">Sesi baru <span>＋</span></button>
+      </div>
+    </header>
+
+    <main class="landing-main">
+      <section class="hero">
+        <p class="kicker">AI MOCKUP WORKSPACE</p>
+        <h1>Ide menjadi interface,<br><em>langsung di browser.</em></h1>
+        <p class="hero-copy">Buat mockup, dashboard, chart, dan diagram melalui percakapan. Setiap sesi menyimpan chat, file, dan versi perubahan secara terpisah.</p>
+      </section>
+
+      <section class="sessions-section">
+        <div class="section-heading">
+          <div><p class="kicker">WORKSPACES</p><h2>Sesi terakhir</h2></div>
+          <span id="sessionCount" class="count-label">0 sesi</span>
+        </div>
+        <div id="sessionGrid" class="session-grid"></div>
+        <div id="emptySessions" class="empty-sessions" hidden>
+          <span class="empty-icon">✦</span>
+          <h3>Belum ada sesi</h3>
+          <p>Buat workspace pertama untuk mulai menghasilkan mockup dengan AI.</p>
+          <button class="button button-dark" data-create>Sesi pertama <span>＋</span></button>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <section id="workspaceView" class="workspace-view" hidden>
+    <header class="workspace-header">
+      <div class="workspace-identity">
+        <button id="backButton" class="icon-button" title="Kembali ke sesi" aria-label="Kembali">←</button>
+        <a class="brand compact" href="#"><span class="brand-mark">S</span></a>
+        <span class="header-divider"></span>
+        <div><span class="header-label">SESSION</span><strong id="workspaceName">Workspace</strong></div>
+      </div>
+      <div class="workspace-actions">
+        <span id="usageBadge" class="topbar-tokens" hidden title="Token usage">
+          <span id="usagePrompt" class="token-prompt">0</span>
+          <span class="token-sep">/</span>
+          <span id="usageCompletion" class="token-completion">0</span>
+        </span>
+        <span id="workspaceStatus" class="workspace-status"><i></i><span>Ready</span></span>
+        <button id="undoButton" class="header-button" title="Batalkan prompt terakhir">↶ <span>Undo</span></button>
+        <button id="filesButton" class="header-button">⌘ <span>Files</span></button>
+        <button id="deleteButton" class="icon-button danger" title="Hapus sesi" aria-label="Hapus sesi">×</button>
+      </div>
+    </header>
+
+    <main class="workspace-main">
+      <aside class="chat-panel">
+        <div class="chat-scroll-region">
+          <div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Histori percakapan"></div>
+        </div>
+        <div class="prompt-area">
+          <form id="promptForm" class="prompt-form">
+            <textarea id="promptInput" rows="1" maxlength="20000" placeholder="Jelaskan mockup atau perubahan yang Anda inginkan..." required></textarea>
+            <div class="prompt-footer">
+              <span><kbd>Enter</kbd> kirim</span>
+              <button id="sendButton" class="send-button" type="submit" aria-label="Kirim prompt">↑</button>
+              <button id="stopButton" class="stop-button" type="button" hidden>■ Stop</button>
+            </div>
+          </form>
+        </div>
+      </aside>
+      <div id="panelResizeHandle" class="panel-resize-handle" role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel chat" tabindex="0"></div>
+
+      <section class="preview-panel">
+        <div class="preview-toolbar">
+          <div class="viewport-tabs" aria-label="Ukuran preview">
+            <button class="active" data-viewport="desktop" title="Desktop" aria-label="Desktop">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="11" rx="1.75"></rect><path d="M9 19h6"></path><path d="M12 16v3"></path></svg>
+              <span>Desktop</span>
+            </button>
+            <button data-viewport="tablet" title="Tablet" aria-label="Tablet">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3.5" width="10" height="17" rx="2"></rect><path d="M11 17.5h2"></path></svg>
+            </button>
+            <button data-viewport="mobile" title="Mobile" aria-label="Mobile">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.25" y="2.75" width="7.5" height="18.5" rx="2"></rect><path d="M11 5h2"></path><circle cx="12" cy="18" r=".8" fill="currentColor" stroke="none"></circle></svg>
+            </button>
+          </div>
+          <div class="preview-address"><i></i><span id="previewAddress">/index.html</span></div>
+          <div class="toolbar-actions">
+            <button id="refreshButton" title="Refresh preview">↻</button>
+            <button id="openPreviewButton" title="Buka di tab baru">↗</button>
+          </div>
+        </div>
+        <div id="previewStage" class="preview-stage">
+          <div id="previewLoading" class="preview-loading"><span></span><p>Memuat preview</p></div>
+          <div id="deviceFrame" class="device-frame desktop">
+            <iframe id="previewFrame" title="Live preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+          </div>
+        </div>
+
+        <aside id="filesDrawer" class="files-drawer" aria-hidden="true">
+          <header><div><span class="header-label">SESSION RESOURCE</span><h3>Files</h3></div><button id="closeFilesButton" class="icon-button">×</button></header>
+          <div class="file-workspace">
+            <nav id="fileList" class="file-list"></nav>
+            <section id="editorPane" class="editor-pane">
+              <div class="editor-empty"><span>⌘</span><p>Pilih file untuk melihat source</p></div>
+            </section>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </section>
+
+  <dialog id="createDialog" class="dialog">
+    <form id="createForm" method="dialog">
+      <div class="dialog-head"><div><p class="kicker">NEW WORKSPACE</p><h2>Buat sesi</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
+      <label class="field"><span>Nama sesi</span><input id="sessionName" name="name" maxlength="80" placeholder="Contoh: Dashboard penjualan" autofocus required></label>
+      <fieldset><legend>Mulai dari</legend><div class="template-options">
+        <label><input type="radio" name="template" value="blank" checked><span><i class="blank-template"></i><b>Blank canvas</b><small>Mulai dari halaman kosong</small></span></label>
+        <label><input type="radio" name="template" value="dashboard"><span><i class="dashboard-template"></i><b>Dashboard</b><small>Struktur dashboard dasar</small></span></label>
+      </div></fieldset>
+      <div class="dialog-actions"><button type="button" class="button button-ghost" data-close-dialog>Batal</button><button type="submit" class="button button-dark">Buat sesi <span>→</span></button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/app.js?n=20"></script>
+</body>
+</html>
