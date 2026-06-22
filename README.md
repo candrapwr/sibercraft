@@ -64,8 +64,8 @@ SiberCraft otomatis menggunakan AI yang dapat memahami gambar pada permintaan te
 Format yang didukung adalah PNG, JPEG, WebP, dan GIF, dengan batas:
 
 - Maksimal 4 gambar dalam satu permintaan
-- Maksimal 500 KB untuk setiap gambar
-- Maksimal 2 MB untuk seluruh gambar dalam satu permintaan
+- Maksimal 1 MB untuk setiap gambar
+- Maksimal 4 MB untuk seluruh gambar dalam satu permintaan
 
 Contoh permintaan dengan gambar:
 
