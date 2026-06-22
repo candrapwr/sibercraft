@@ -1,5 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const MAX_IMAGE_BYTES = 500_000;
 
 const state = {
   config: null,
@@ -31,7 +32,11 @@ const ui = {
   exportDialog: $("#exportDialog"), exportButton: $("#exportButton"),
   exportHtmlButton: $("#exportHtmlButton"), exportImageButton: $("#exportImageButton"),
   imageTray: $("#imageTray"), imageButton: $("#imageButton"), imageInput: $("#imageInput"),
+  imageLightbox: $("#imageLightbox"), lightboxImage: $("#lightboxImage"),
+  lightboxCaption: $("#lightboxCaption"), closeImageLightbox: $("#closeImageLightbox"),
 };
+
+let lightboxTrigger = null;
 
 boot();
 
@@ -66,6 +71,21 @@ function bindEvents() {
     ui.imageInput.click();
   });
   ui.imageInput.addEventListener("change", () => addPendingImages(ui.imageInput.files).catch((error) => notify(error.message, true)));
+  ui.chatMessages.addEventListener("click", (event) => {
+    const image = event.target.closest(".message-images img");
+    if (image) openImageLightbox(image);
+  });
+  ui.chatMessages.addEventListener("keydown", (event) => {
+    const image = event.target.closest(".message-images img");
+    if (image && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      openImageLightbox(image);
+    }
+  });
+  ui.closeImageLightbox.addEventListener("click", closeImageLightbox);
+  ui.imageLightbox.addEventListener("click", (event) => {
+    if (event.target === ui.imageLightbox) closeImageLightbox();
+  });
   ui.stopButton.addEventListener("click", stopAgent);
   $("#refreshButton").addEventListener("click", () => refreshPreview());
   $("#openPreviewButton").addEventListener("click", () => window.open(previewUrl(), "_blank", "noopener"));
@@ -82,7 +102,11 @@ function bindEvents() {
   ui.panelResizeHandle.addEventListener("keydown", resizePanelWithKeyboard);
   ui.previewFrame.addEventListener("load", () => { ui.previewLoading.hidden = true; });
   window.addEventListener("hashchange", routeFromHash);
-  window.addEventListener("keydown", (event) => { if (event.key === "Escape") closeFiles(); });
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!ui.imageLightbox.hidden) closeImageLightbox();
+    else closeFiles();
+  });
   window.addEventListener("resize", applyChatPanelWidth);
   window.addEventListener("pointermove", resizePanel);
   window.addEventListener("pointerup", endPanelResize);
@@ -295,6 +319,9 @@ function appendUserMessage(content = "", attachments = []) {
       image.src = attachment.url || attachment.dataUrl;
       image.alt = attachment.name || "Gambar referensi";
       image.loading = "lazy";
+      image.tabIndex = 0;
+      image.setAttribute("role", "button");
+      image.setAttribute("aria-label", `Perbesar ${image.alt}`);
       gallery.append(image);
     }
     body.append(gallery);
@@ -311,6 +338,25 @@ function appendUserMessage(content = "", attachments = []) {
   return wrapper;
 }
 
+function openImageLightbox(image) {
+  lightboxTrigger = image;
+  ui.lightboxImage.src = image.currentSrc || image.src;
+  ui.lightboxImage.alt = image.alt || "Gambar referensi";
+  ui.lightboxCaption.textContent = image.alt || "Gambar referensi";
+  ui.imageLightbox.hidden = false;
+  document.body.classList.add("lightbox-open");
+  ui.closeImageLightbox.focus();
+}
+
+function closeImageLightbox() {
+  if (ui.imageLightbox.hidden) return;
+  ui.imageLightbox.hidden = true;
+  ui.lightboxImage.removeAttribute("src");
+  document.body.classList.remove("lightbox-open");
+  lightboxTrigger?.focus();
+  lightboxTrigger = null;
+}
+
 async function addPendingImages(fileList) {
   const files = [...(fileList || [])];
   ui.imageInput.value = "";
@@ -322,8 +368,8 @@ async function addPendingImages(fileList) {
       notify(`Format ${file.name} tidak didukung`, true);
       continue;
     }
-    if (file.size > 5_000_000) {
-      notify(`${file.name} melebihi batas 5 MB`, true);
+    if (file.size > MAX_IMAGE_BYTES) {
+      notify(`${file.name} melebihi batas 500 KB`, true);
       continue;
     }
     state.pendingImages.push({
