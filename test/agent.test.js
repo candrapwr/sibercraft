@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractWriteFileDraft, isConversationalPrompt } from "../src/agent.js";
+import { compactFinalResponse, extractWriteFileDraft, isConversationalPrompt } from "../src/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);
@@ -18,4 +18,13 @@ test("draft write_file dapat diekstrak dari argumen JSON yang belum selesai", ()
   });
   assert.equal(extractWriteFileDraft('{"path":"data.json","content":"{}"}'), null);
   assert.equal(extractWriteFileDraft('{"path":"../index.html","content":"x"}'), null);
+});
+
+test("rangkuman final dibatasi maksimal tiga kalimat dan enam puluh kata", () => {
+  const compact = compactFinalResponse("Satu selesai. Dua selesai. Tiga selesai. Empat tidak boleh tampil.");
+  assert.equal(compact, "Satu selesai. Dua selesai. Tiga selesai…");
+
+  const long = compactFinalResponse(Array.from({ length: 80 }, (_, index) => `kata${index}`).join(" "));
+  assert.equal(long.replace(/…$/, "").split(/\s+/).length, 60);
+  assert.match(long, /…$/);
 });

@@ -150,6 +150,15 @@ Sesi dapat dihapus dari kartu pada halaman utama atau dari tombol hapus di dalam
 
 SiberCraft akan meminta konfirmasi terlebih dahulu. Menghapus sesi juga menghapus percakapan, resource, preview, dan seluruh riwayat perubahan sesi tersebut.
 
+### Export hasil
+
+Gunakan tombol **Export** pada header workspace untuk mengunduh hasil dalam dua format:
+
+- **Single HTML** menggabungkan halaman, tampilan, interaksi, dan gambar lokal menjadi satu file HTML yang mudah dipindahkan atau dibuka kembali.
+- **Full-page image** mengambil screenshot penuh preview saat ini dan menyimpannya sebagai gambar PNG.
+
+Export gambar mengikuti ukuran preview yang sedang dipilih. Pilih mode desktop, tablet, atau mobile terlebih dahulu jika membutuhkan ukuran tertentu. Beberapa resource dari internet tetap memerlukan koneksi ketika Single HTML dibuka.
+
 ## Memahami status proses
 
 Beberapa status yang mungkin terlihat:

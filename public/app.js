@@ -27,6 +27,8 @@ const ui = {
   deviceFrame: $("#deviceFrame"), filesDrawer: $("#filesDrawer"), fileList: $("#fileList"),
   workspaceMain: $(".workspace-main"), panelResizeHandle: $("#panelResizeHandle"),
   editorPane: $("#editorPane"), toast: $("#toast"), undoButton: $("#undoButton"),
+  exportDialog: $("#exportDialog"), exportButton: $("#exportButton"),
+  exportHtmlButton: $("#exportHtmlButton"), exportImageButton: $("#exportImageButton"),
 };
 
 boot();
@@ -62,6 +64,10 @@ function bindEvents() {
   $("#openPreviewButton").addEventListener("click", () => window.open(previewUrl(), "_blank", "noopener"));
   $$('[data-viewport]').forEach((button) => button.addEventListener("click", () => setViewport(button)));
   $("#filesButton").addEventListener("click", openFiles);
+  ui.exportButton.addEventListener("click", openExportDialog);
+  $("#closeExportButton").addEventListener("click", () => ui.exportDialog.close());
+  ui.exportHtmlButton.addEventListener("click", exportSingleHtml);
+  ui.exportImageButton.addEventListener("click", exportFullImage);
   $("#closeFilesButton").addEventListener("click", closeFiles);
   ui.undoButton.addEventListener("click", undoChange);
   $("#deleteButton").addEventListener("click", deleteSession);
@@ -591,6 +597,66 @@ function setRunningUi(running) {
   ui.sendButton.hidden = running;
   ui.stopButton.hidden = !running;
   ui.undoButton.disabled = running || !state.session?.checkpointCount;
+  ui.exportButton.disabled = running;
+}
+
+function openExportDialog() {
+  if (!state.session || state.running) return;
+  ui.exportDialog.showModal();
+}
+
+async function exportSingleHtml() {
+  if (!state.session || state.running) return;
+  ui.exportHtmlButton.disabled = true;
+  try {
+    const response = await fetch(`/api/sessions/${state.session.id}/export/html`);
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Export HTML gagal");
+    downloadBlob(await response.blob(), `${safeDownloadName(state.session.name)}.html`);
+    ui.exportDialog.close();
+    notify("Single HTML berhasil diexport");
+  } catch (error) {
+    notify(error.message, true);
+  } finally {
+    ui.exportHtmlButton.disabled = false;
+  }
+}
+
+async function exportFullImage() {
+  if (!state.session || state.running) return;
+  ui.exportDialog.close();
+  ui.exportImageButton.disabled = true;
+  ui.exportButton.disabled = true;
+  const width = Math.max(390, Math.round(ui.deviceFrame.getBoundingClientRect().width));
+  setWorkspaceStatus("working", "Exporting image");
+  notify("Screenshot sedang diproses");
+  try {
+    const response = await fetch(`/api/sessions/${state.session.id}/export/image?width=${width}`);
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Export gambar gagal");
+    downloadBlob(await response.blob(), `${safeDownloadName(state.session.name)}.png`);
+    setWorkspaceStatus("ready", "Ready");
+    notify("Full-page image berhasil diexport");
+  } catch (error) {
+    setWorkspaceStatus("error", "Export error");
+    notify(error.message, true);
+  } finally {
+    ui.exportImageButton.disabled = false;
+    ui.exportButton.disabled = false;
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function safeDownloadName(value) {
+  return String(value || "sibercraft-export").trim().replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "sibercraft-export";
 }
 
 async function stopAgent() {

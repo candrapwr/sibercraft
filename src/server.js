@@ -3,8 +3,10 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { config } from "./config.js";
 import { isConversationalPrompt, runAgent } from "./agent.js";
+import { buildStandaloneHtml } from "./exporter.js";
 import { HttpError, SessionStore } from "./session-store.js";
 import { resolveWithin } from "./path-sandbox.js";
+import { captureFullPage } from "./screenshot.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
@@ -77,6 +79,39 @@ async function handleApi(request, response, url) {
   }
   if (method === "GET" && action === "files") {
     return sendJson(response, 200, await store.listFiles(id));
+  }
+  if (method === "GET" && action === "export/html") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
+    const session = await store.get(id);
+    const html = await buildStandaloneHtml(store.workspaceDir(id));
+    const filename = `${safeFilename(session.name)}.html`;
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    });
+    response.end(html);
+    return;
+  }
+  if (method === "GET" && action === "export/image") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
+    const session = await store.get(id);
+    const width = Math.min(2560, Math.max(320, Number.parseInt(url.searchParams.get("width") || "1440", 10) || 1440));
+    const previewUrl = `http://127.0.0.1:${config.port}/preview/${id}/?export=${Date.now()}`;
+    let image;
+    try {
+      image = await captureFullPage({ url: previewUrl, width });
+    } catch (error) {
+      throw new HttpError(503, error.message || "Browser screenshot tidak tersedia");
+    }
+    response.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Disposition": `attachment; filename="${safeFilename(session.name)}.png"`,
+      "Content-Length": image.length,
+      "Cache-Control": "no-store",
+    });
+    response.end(image);
+    return;
   }
   if (method === "GET" && action === "file") {
     const path = url.searchParams.get("path");
@@ -271,6 +306,11 @@ async function readJson(request, limit = 1_000_000) {
 function sendJson(response, status, value) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   response.end(JSON.stringify(value));
+}
+
+function safeFilename(value) {
+  const filename = String(value || "sibercraft-export").trim().replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+  return filename || "sibercraft-export";
 }
 
 function mimeType(path) {
