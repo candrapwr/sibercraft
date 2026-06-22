@@ -10,11 +10,16 @@ export const config = {
     apiKey: process.env.DEEPSEEK_API_KEY || "",
     model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
     baseUrl: (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
-    maxIterations: toPositiveInt(process.env.AGENT_MAX_ITERATIONS, 16),
+    maxIterations: toPositiveInt(process.env.AGENT_MAX_ITERATIONS, 50),
     requestLogging: toBoolean(process.env.LLM_REQUEST_LOGGING, false),
     contextOptimize: {
       enabled: toBoolean(process.env.CONTEXT_OPTIMIZE, true),
       mode: process.env.CONTEXT_OPTIMIZE_MODE === "drop" ? "drop" : "summary",
+    },
+    multimodal: {
+      apiKey: process.env.MULTIMODAL_API_KEY || process.env.DEEPSEEK_API_KEY || "",
+      model: process.env.MULTIMODAL_MODEL || "",
+      baseUrl: (process.env.MULTIMODAL_BASE_URL || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
     },
   },
 };

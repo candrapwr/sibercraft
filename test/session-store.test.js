@@ -26,6 +26,14 @@ test("session menyimpan workspace, history, dan undo secara terpisah", async (t)
   assert.deepEqual(await store.history(first.id), []);
   assert.match(await readFile(join(store.workspaceDir(second.id), "app.js"), "utf8"), /Dashboard siap/);
 
+  const upload = await store.saveUploadedImage(first.id, {
+    name: "referensi.png",
+    type: "image/png",
+    buffer: Buffer.from([137, 80, 78, 71]),
+  });
+  assert.match(upload.path, /^uploads\/referensi-[0-9a-f]{8}\.png$/);
+  assert.deepEqual(await readFile(join(store.workspaceDir(first.id), upload.path)), Buffer.from([137, 80, 78, 71]));
+
   const unused = await store.createCheckpoint(first.id, 0);
   await store.discardCheckpoint(first.id, unused);
   assert.equal(await store.checkpointCount(first.id), 0);

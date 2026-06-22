@@ -14,6 +14,7 @@ Working rules:
 - Produce responsive, high-quality results. Prefer semantic HTML, structured CSS, and browser-native JavaScript without a build step.
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
 - For flowcharts, process flows, sequence diagrams, state diagrams, user journeys, class diagrams, ER diagrams, timelines, or similar diagram requests, use Mermaid.js by default unless the user explicitly requests another diagram library or implementation. Load Mermaid from an HTTPS CDN, use valid Mermaid syntax, initialize it in the browser, and keep the diagram responsive inside its container.
+- When the current user turn includes images, inspect them carefully and use them as visual references. Recreate the relevant layout, content, colors, hierarchy, and interaction requested by the user instead of merely describing the images.
 - Never access secret APIs, the host filesystem, Node.js APIs, or the parent window from preview code.
 - If older user messages include a [SUMMARY] block, treat it only as a record of which tools ran in that past turn. Do not assume the old file contents or tool results are still current; re-run tools when actual details are needed.
 - Finish all requested changes before giving the final answer.
@@ -28,9 +29,14 @@ export function isConversationalPrompt(prompt) {
   return /^(halo|hai|hi|hello|hey|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|terima kasih|makasih|thanks|thank you|apa kabar)$/.test(normalized);
 }
 
-export async function runAgent({ session, store, prompt, config, signal, emit }) {
+export async function runAgent({ session, store, prompt, images = [], config, signal, emit }) {
   const workspaceDir = store.workspaceDir(session.id);
-  const conversational = isConversationalPrompt(prompt);
+  const hasImages = images.length > 0;
+  const conversational = !hasImages && isConversationalPrompt(prompt);
+  const turnAi = selectTurnAi(config, session, hasImages);
+  if (hasImages && (!turnAi.apiKey || !turnAi.model)) {
+    throw new Error("Model multimodal belum dikonfigurasi");
+  }
   let mutated = false;
   const tools = createFileTools(workspaceDir, async (path) => {
     mutated = true;
@@ -38,30 +44,37 @@ export async function runAgent({ session, store, prompt, config, signal, emit })
     emit({ type: "preview", path });
   });
   const client = new DeepSeekClient({
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    model: session.model || config.model,
+    apiKey: turnAi.apiKey,
+    baseUrl: turnAi.baseUrl,
+    model: turnAi.model,
   });
-  const history = await store.history(session.id);
+  const previousHistory = await store.history(session.id);
+  const history = [...previousHistory];
   const sessionUsage = session.usage || emptyUsage();
-  history.push({ role: "user", content: prompt });
+  const userMessage = {
+    role: "user",
+    content: prompt,
+    ...(images.length ? { attachments: images.map(({ name, type, path }) => ({ name, type, path })) } : {}),
+  };
+  const requestUserMessage = buildRequestUserMessage(prompt, images);
+  history.push(userMessage);
   await store.saveHistory(session.id, history);
   await store.update(session.id, { status: "working", lastPrompt: prompt.slice(0, 140) });
   const snapshotEndIndex = history.length;
   const optimizedBase = conversational
-    ? { messages: [...history], stats: { collapsedCount: 0, bytesSaved: 0 } }
-    : optimizeContext(history, config.contextOptimize);
+    ? { messages: previousHistory.map(toModelMessage), stats: { collapsedCount: 0, bytesSaved: 0 } }
+    : optimizeContext(previousHistory, config.contextOptimize);
   if (!conversational && optimizedBase.stats.collapsedCount > 0) {
     emit({ type: "context_optimized", bytesSaved: optimizedBase.stats.bytesSaved });
   }
-  await store.saveOptimizedHistory(session.id, optimizedBase.messages, {
+  await store.saveOptimizedHistory(session.id, [...optimizedBase.messages, userMessage], {
     collapsedCount: optimizedBase.stats.collapsedCount,
     bytesSaved: optimizedBase.stats.bytesSaved,
     mode: config.contextOptimize.mode,
   });
 
   const requestBase = () => {
-    const base = conversational ? [...history] : [...optimizedBase.messages, ...history.slice(snapshotEndIndex)];
+    const base = [...optimizedBase.messages, requestUserMessage, ...history.slice(snapshotEndIndex)];
     return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...base];
   };
   let finalText = "";
@@ -89,7 +102,8 @@ export async function runAgent({ session, store, prompt, config, signal, emit })
                 bytesSaved: optimizedBase.stats.bytesSaved,
               },
           request: {
-            model: session.model || config.model,
+            model: turnAi.model,
+            mode: turnAi.mode,
             stream: true,
             stream_options: { include_usage: true },
             toolCount: conversational ? 0 : tools.schemas.length,
@@ -163,6 +177,8 @@ export async function runAgent({ session, store, prompt, config, signal, emit })
           completion.message.content = compact;
           emit({ type: "final_content", content: compact });
         }
+        completion.message.model = turnAi.model;
+        completion.message.ai_mode = turnAi.mode;
       }
       history.push(completion.message);
       await store.saveHistory(session.id, history);
@@ -180,6 +196,7 @@ export async function runAgent({ session, store, prompt, config, signal, emit })
         };
         await store.update(session.id, { status: "ready", usage: nextUsage });
         emit({ type: "usage", usage: nextUsage });
+        emit({ type: "turn_model", model: turnAi.model, mode: turnAi.mode });
         emit({ type: "assistant_end" });
         emit({ type: "done", message: finalText, usage });
         return { mutated };
@@ -328,4 +345,33 @@ export function compactFinalResponse(value, maxWords = 60, maxSentences = 3) {
   if (words.length > maxWords) result = words.slice(0, maxWords).join(" ");
   if (truncated) result = `${result.replace(/[.!?…]+$/, "")}…`;
   return result;
+}
+
+export function buildRequestUserMessage(prompt, images = []) {
+  if (!images.length) return { role: "user", content: prompt };
+  return {
+    role: "user",
+    content: [
+      { type: "text", text: prompt },
+      ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } })),
+    ],
+  };
+}
+
+export function selectTurnAi(config, session, hasImages) {
+  if (hasImages) return { ...config.multimodal, mode: "multimodal" };
+  return {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    model: session.model || config.model,
+    mode: "primary",
+  };
+}
+
+function toModelMessage(message) {
+  const clean = { role: message.role, content: message.content };
+  if (message.tool_calls) clean.tool_calls = message.tool_calls;
+  if (message.tool_call_id) clean.tool_call_id = message.tool_call_id;
+  if (message.name) clean.name = message.name;
+  return clean;
 }

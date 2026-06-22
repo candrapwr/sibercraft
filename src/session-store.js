@@ -191,6 +191,23 @@ export class SessionStore {
     await this.update(id, { status: "ready" });
   }
 
+  async saveUploadedImage(id, { name, type, buffer }) {
+    await this.get(id);
+    const extension = ({
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/webp": ".webp",
+      "image/gif": ".gif",
+    })[type];
+    if (!extension) throw new HttpError(400, "Format gambar tidak didukung");
+    const base = String(name || "image").replace(/\.[^.]+$/, "").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "image";
+    const path = `uploads/${base}-${randomUUID().slice(0, 8)}${extension}`;
+    const fullPath = await resolveWithin(this.workspaceDir(id), path);
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, buffer);
+    return { name: String(name || `image${extension}`).slice(0, 120), type, path };
+  }
+
   async checkpointCount(id) {
     try {
       const entries = await readdir(join(this.sessionDir(id), "checkpoints"), { withFileTypes: true });
