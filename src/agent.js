@@ -16,7 +16,7 @@ Working rules:
 - Never access secret APIs, the host filesystem, Node.js APIs, or the parent window from preview code.
 - If older user messages include a [SUMMARY] block, treat it only as a record of which tools ran in that past turn. Do not assume the old file contents or tool results are still current; re-run tools when actual details are needed.
 - Finish all requested changes before giving the final answer.
-- The final answer must stay short and in Bahasa Indonesia: explain what was built and mention the main files changed. Do not paste full source code into chat.`;
+- The final answer must be a very short summary: Do not include implementation details, long lists, repeated explanations, suggestions, or full source code.`;
 
 const CONVERSATION_PROMPT = `${SYSTEM_PROMPT}
 
@@ -155,9 +155,17 @@ export async function runAgent({ session, store, prompt, config, signal, emit })
         completion.message.content = buildToolCallNarration(calls);
         emit({ type: "content", delta: completion.message.content });
       }
+      const isFinalResponse = !calls.length || completion.finishReason !== "tool_calls";
+      if (isFinalResponse) {
+        const compact = compactFinalResponse(completion.message.content || "Selesai.");
+        if (compact !== completion.message.content) {
+          completion.message.content = compact;
+          emit({ type: "final_content", content: compact });
+        }
+      }
       history.push(completion.message);
       await store.saveHistory(session.id, history);
-      if (!calls.length || completion.finishReason !== "tool_calls") {
+      if (isFinalResponse) {
         finalText = completion.message.content || "Selesai.";
         const nextUsage = {
           last: {
@@ -306,4 +314,17 @@ function isPreviewableDraftPath(path) {
     && !/^[a-z]:/i.test(normalized)
     && !normalized.split("/").includes("..")
     && /\.(?:html?|css|js|mjs|svg)$/i.test(normalized);
+}
+
+export function compactFinalResponse(value, maxWords = 60, maxSentences = 3) {
+  const content = String(value || "").trim();
+  if (!content) return "Selesai.";
+  const normalized = content.replace(/\s+/g, " ");
+  const sentences = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [normalized];
+  let result = sentences.slice(0, maxSentences).map((sentence) => sentence.trim()).join(" ");
+  const words = result.split(/\s+/).filter(Boolean);
+  const truncated = sentences.length > maxSentences || words.length > maxWords;
+  if (words.length > maxWords) result = words.slice(0, maxWords).join(" ");
+  if (truncated) result = `${result.replace(/[.!?…]+$/, "")}…`;
+  return result;
 }
