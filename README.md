@@ -2,7 +2,7 @@
 
 **Buat tampilan web dengan AI, langsung dari percakapan.**
 
-SiberCraft membantu mengubah ide menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, lalu AI akan membuat dan memperbarui hasilnya di area preview.
+SiberCraft membantu mengubah ide atau gambar referensi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, lalu AI akan membuat dan memperbarui hasilnya di area preview.
 
 Anda tidak harus memahami pemrograman untuk mulai menggunakan SiberCraft.
 
@@ -18,6 +18,7 @@ SiberCraft dapat membantu membuat berbagai tampilan, misalnya:
 - Form, tabel, kartu, sidebar, dan navigasi
 - Tampilan desktop, tablet, dan mobile
 - Prototype dengan tombol dan interaksi sederhana
+- Tampilan baru berdasarkan screenshot atau gambar referensi
 
 ## Cara kerja
 
@@ -54,7 +55,27 @@ daftar fitur, testimoni, dan tombol mulai gratis.
 
 Tekan **Enter** untuk mengirim. Gunakan **Shift + Enter** jika ingin membuat baris baru.
 
-### 3. Amati proses dan preview
+### 3. Tambahkan gambar referensi (opsional)
+
+Tekan ikon gambar di area chat untuk menambahkan screenshot, wireframe, foto, atau referensi visual. Gambar yang dipilih akan muncul sebagai thumbnail dan dapat dihapus sebelum permintaan dikirim.
+
+SiberCraft otomatis menggunakan AI yang dapat memahami gambar pada permintaan tersebut. Jika permintaan berikutnya hanya berisi teks, aplikasi kembali menggunakan AI utama secara otomatis. Anda tidak perlu mengganti mode secara manual.
+
+Format yang didukung adalah PNG, JPEG, WebP, dan GIF, dengan batas:
+
+- Maksimal 4 gambar dalam satu permintaan
+- Maksimal 5 MB untuk setiap gambar
+- Maksimal 12 MB untuk seluruh gambar dalam satu permintaan
+
+Contoh permintaan dengan gambar:
+
+```text
+Buat dashboard baru dengan susunan seperti gambar ini.
+Gunakan dark mode, pertahankan struktur utamanya,
+tetapi gunakan warna dan isi yang sesuai untuk monitoring server.
+```
+
+### 4. Amati proses dan preview
 
 Saat AI bekerja, panel chat akan menampilkan status proses. Jika AI perlu membaca atau menulis resource, aktivitas tersebut muncul dalam grup **Tool calls**.
 
@@ -62,7 +83,7 @@ Grup ini sengaja dibuat ringkas dan tertutup secara default. Anda dapat membukan
 
 Preview akan berubah otomatis. Saat resource berukuran besar sedang dibuat, draft dapat tampil secara bertahap sehingga proses tidak terlihat berhenti.
 
-### 4. Lanjutkan dengan revisi
+### 5. Lanjutkan dengan revisi
 
 Tidak perlu mengulang semua penjelasan dari awal. Anda dapat memberikan revisi lanjutan seperti:
 
@@ -112,6 +133,16 @@ Setiap project dibuat sebagai sesi sendiri. Percakapan dan resource dari satu se
 
 Ketika AI membuat resource baru, preview dapat menampilkan hasil sementara selama proses berlangsung. Setelah selesai, draft otomatis diganti dengan hasil final yang stabil.
 
+### Memahami gambar referensi
+
+SiberCraft dapat membaca gambar yang dilampirkan pada chat dan menggunakannya sebagai konteks untuk membuat atau memperbaiki tampilan. Mode AI yang sesuai dipilih otomatis untuk setiap permintaan, sehingga penggunaan gambar tidak memengaruhi permintaan teks berikutnya.
+
+Gambar yang dikirim disimpan bersama resource sesi agar tetap tersedia saat project dibuka kembali.
+
+### Diagram yang terstruktur
+
+Untuk permintaan flowchart, diagram alur, diagram proses, dan bentuk sejenis, AI akan menggunakan format diagram terstruktur. Hasilnya lebih mudah dibaca, disusun ulang, dan diperbarui melalui permintaan lanjutan.
+
 ### Pilihan ukuran preview
 
 Gunakan tombol pada toolbar preview untuk memeriksa tampilan dalam ukuran:
@@ -143,6 +174,8 @@ Draft yang belum selesai akan dibersihkan dan preview kembali menggunakan hasil 
 ### Informasi penggunaan AI
 
 Angka pada header menunjukkan penggunaan AI untuk proses terakhir. Nilainya di-reset ketika permintaan baru dimulai, kemudian dihitung kembali sampai pekerjaan tersebut selesai.
+
+Di akhir setiap jawaban terdapat label kecil yang menunjukkan AI yang digunakan pada permintaan tersebut, termasuk apakah permintaan diproses dalam mode utama atau mode gambar. Informasi ini disimpan bersama percakapan dan tetap terlihat ketika sesi dibuka kembali.
 
 ### Hapus sesi
 
@@ -204,11 +237,12 @@ ketika salah satu baris tabel ditekan.
 
 - Mulai dari struktur utama, kemudian lakukan revisi secara bertahap.
 - Berikan contoh teks dan data agar preview terasa lebih nyata.
+- Lampirkan screenshot atau referensi visual jika susunan yang diinginkan sulit dijelaskan dengan teks.
 - Sebutkan bagian yang sudah bagus agar AI tidak mengubahnya.
 - Periksa mode desktop dan mobile sebelum menyelesaikan sesi.
 - Gunakan Undo segera jika perubahan terakhir tidak sesuai.
 - Buat sesi berbeda untuk project yang tidak berhubungan.
-- Hindari memasukkan password, kode akses rahasia, atau data pribadi ke dalam prompt.
+- Hindari memasukkan password, kode akses rahasia, data pribadi, atau gambar sensitif ke dalam prompt.
 
 ## Pertanyaan umum
 
@@ -223,6 +257,14 @@ SiberCraft menampilkan draft secara bertahap. Tampilan sementara mungkin belum l
 ### Apakah percakapan lama masih tersimpan?
 
 Ya. Percakapan dan resource disimpan sesuai sesinya sehingga dapat dibuka kembali selama sesi tersebut belum dihapus.
+
+### Kapan mode gambar digunakan?
+
+Mode gambar hanya digunakan ketika permintaan saat ini memiliki gambar terlampir. Permintaan berikutnya yang hanya berisi teks akan kembali menggunakan mode utama secara otomatis.
+
+### Mengapa informasi AI berbeda pada beberapa jawaban?
+
+SiberCraft memilih AI sesuai isi setiap permintaan. Label kecil di akhir jawaban membantu menunjukkan mode yang digunakan tanpa perlu membuka pengaturan teknis.
 
 ### Apa yang terjadi jika proses dihentikan?
 
@@ -248,4 +290,6 @@ Jika aplikasi tidak dapat dibuka atau status AI menunjukkan belum siap, hubungi 
 
 ---
 
-SiberCraft dirancang agar proses membuat interface terasa seperti berdiskusi dengan rekan desain dan pengembangan: jelaskan ide, lihat hasilnya, lalu revisi sampai sesuai.
+SiberCraft dirancang agar proses membuat interface terasa seperti berdiskusi dengan rekan desain dan pengembangan: jelaskan ide, lampirkan referensi jika diperlukan, lihat hasilnya, lalu revisi sampai sesuai.
+
+Dikembangkan oleh **datasiberLab**. Kontak: [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)
