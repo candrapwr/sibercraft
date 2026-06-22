@@ -5,36 +5,78 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
   <title>SiberCraft — AI Mockup Workspace</title>
-  <link rel="stylesheet" href="/styles.css?n=22">
+  <link rel="stylesheet" href="/styles.css?n=25">
 </head>
 <body>
   <section id="sessionsView" class="sessions-view">
     <header class="landing-nav">
-      <a class="brand" href="#" aria-label="SiberCraft home"><span class="brand-mark">S</span><span>SiberCraft</span></a>
-      <div class="nav-actions">
-        <span id="aiStatus" class="status-pill"><i></i><span>Memeriksa AI</span></span>
-        <button id="openCreateButton" class="button button-dark">Sesi baru <span>＋</span></button>
+      <div class="landing-nav-inner">
+        <a class="brand" href="#" aria-label="SiberCraft home"><span class="brand-mark">S</span><span>SiberCraft</span><small>AI workspace</small></a>
+        <div class="nav-actions">
+          <span id="aiStatus" class="status-pill"><i></i><span>Memeriksa AI</span></span>
+          <button id="openCreateButton" class="button button-primary"><span>＋</span>Sesi baru</button>
+        </div>
       </div>
     </header>
 
     <main class="landing-main">
-      <section class="hero">
-        <p class="kicker">AI MOCKUP WORKSPACE</p>
-        <h1>Ide menjadi interface,<br><em>langsung di browser.</em></h1>
-        <p class="hero-copy">Buat mockup, dashboard, chart, dan diagram melalui percakapan. Setiap sesi menyimpan chat, file, dan versi perubahan secara terpisah.</p>
+      <section class="landing-hero">
+        <div class="hero-content">
+          <div class="hero-badge"><span>✦</span> AI-powered design workspace</div>
+          <h1>Dari ide menjadi<br><em>interface nyata.</em></h1>
+          <p class="hero-copy">Rancang mockup, dashboard, chart, dan diagram melalui percakapan. Lihat setiap perubahan secara langsung, revisi dengan cepat, lalu export hasilnya.</p>
+          <div class="hero-actions">
+            <button class="button button-primary button-large" data-create><span>＋</span>Mulai sesi baru</button>
+            <a class="button button-secondary button-large" href="#recentSessions">Lihat workspace <span>↓</span></a>
+          </div>
+          <div class="hero-capabilities" aria-label="Fitur utama">
+            <span><i>01</i> Live preview</span>
+            <span><i>02</i> Session history</span>
+            <span><i>03</i> Export ready</span>
+          </div>
+        </div>
+
+        <div class="hero-product" aria-hidden="true">
+          <div class="product-window">
+            <div class="product-topbar">
+              <span class="product-dots"><i></i><i></i><i></i></span>
+              <span class="product-address">sibercraft / workspace</span>
+              <span class="product-live"><i></i> Live</span>
+            </div>
+            <div class="product-body">
+              <div class="product-chat">
+                <span class="product-label">PROMPT</span>
+                <div class="product-message user-preview">Buat dashboard analytics modern dengan chart dan tabel transaksi.</div>
+                <div class="product-ai-line"><i></i><span></span><span></span></div>
+                <div class="product-tool"><span>⌘</span><div><b>3 tool calls</b><small>Writing interface files</small></div><i></i></div>
+                <div class="product-composer"><span>Jelaskan perubahan...</span><b>↑</b></div>
+              </div>
+              <div class="product-preview">
+                <div class="mini-sidebar"><b>S</b><span></span><span></span><span></span></div>
+                <div class="mini-dashboard">
+                  <div class="mini-head"><div><small>OVERVIEW</small><strong>Analytics</strong></div><i></i></div>
+                  <div class="mini-stats"><span></span><span></span><span></span></div>
+                  <div class="mini-chart"><div class="chart-line"></div><i></i><i></i><i></i><i></i><i></i></div>
+                  <div class="mini-table"><span></span><span></span><span></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="floating-chip chip-top"><span>✦</span> Generating UI</div>
+          <div class="floating-chip chip-bottom"><i></i> Preview updated</div>
+        </div>
       </section>
 
-      <section class="sessions-section">
+      <section id="recentSessions" class="sessions-section">
         <div class="section-heading">
-          <div><p class="kicker">WORKSPACES</p><h2>Sesi terakhir</h2></div>
-          <span id="sessionCount" class="count-label">0 sesi</span>
+          <div><p class="kicker">YOUR WORKSPACES</p><h2>Lanjutkan pekerjaan</h2><p class="section-copy">Semua percakapan, preview, dan resource tersimpan sesuai sesinya.</p></div>
+          <div class="section-actions"><span id="sessionCount" class="count-label">0 sesi</span><button class="section-create" data-create>＋ Buat baru</button></div>
         </div>
         <div id="sessionGrid" class="session-grid"></div>
         <div id="emptySessions" class="empty-sessions" hidden>
-          <span class="empty-icon">✦</span>
-          <h3>Belum ada sesi</h3>
-          <p>Buat workspace pertama untuk mulai menghasilkan mockup dengan AI.</p>
-          <button class="button button-dark" data-create>Sesi pertama <span>＋</span></button>
+          <div class="empty-visual"><span>✦</span><i></i><i></i></div>
+          <div><p class="kicker">START CREATING</p><h3>Workspace pertama menunggu ide Anda.</h3><p>Jelaskan tampilan yang ingin dibuat dan biarkan AI menyiapkan interface serta live preview-nya.</p></div>
+          <button class="button button-primary" data-create><span>＋</span>Buat sesi pertama</button>
         </div>
       </section>
     </main>
@@ -155,6 +197,6 @@
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/app.js?n=24"></script>
+  <script type="module" src="/app.js?n=25"></script>
 </body>
 </html>

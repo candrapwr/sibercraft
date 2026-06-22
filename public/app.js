@@ -125,7 +125,7 @@ async function openSession(id) {
 function renderAiStatus() {
   const configured = state.config?.aiConfigured;
   ui.aiStatus.className = `status-pill ${configured ? "ready" : "error"}`;
-  $("span", ui.aiStatus).textContent = configured ? `${state.config.model} ready` : "API key belum diatur";
+  $("span", ui.aiStatus).textContent = configured ? "AI ready" : "AI belum siap";
 }
 
 function renderUsage(usage) {
@@ -165,7 +165,10 @@ function renderSessions() {
     frame.loading = "lazy";
     frame.setAttribute("sandbox", "");
     frame.title = `Preview ${session.name}`;
-    preview.append(frame);
+    const previewBadge = document.createElement("span");
+    previewBadge.className = "session-preview-badge";
+    previewBadge.textContent = session.template === "dashboard" ? "Dashboard" : "Blank canvas";
+    preview.append(frame, previewBadge);
     const meta = document.createElement("div");
     meta.className = "session-meta";
     const copy = document.createElement("div");
