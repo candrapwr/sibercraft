@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
   <title>SiberCraft — AI Mockup Workspace</title>
-  <link rel="stylesheet" href="/styles.css?n=19">
+  <link rel="stylesheet" href="/styles.css?n=22">
 </head>
 <body>
   <section id="sessionsView" class="sessions-view">
@@ -57,6 +57,7 @@
         <span id="workspaceStatus" class="workspace-status"><i></i><span>Ready</span></span>
         <button id="undoButton" class="header-button" title="Batalkan prompt terakhir">↶ <span>Undo</span></button>
         <button id="filesButton" class="header-button">⌘ <span>Files</span></button>
+        <button id="exportButton" class="header-button">⇩ <span>Export</span></button>
         <button id="deleteButton" class="icon-button danger" title="Hapus sesi" aria-label="Hapus sesi">×</button>
       </div>
     </header>
@@ -131,7 +132,29 @@
     </form>
   </dialog>
 
+  <dialog id="exportDialog" class="dialog export-dialog">
+    <div class="export-dialog-content">
+      <div class="dialog-head">
+        <div><p class="kicker">EXPORT PROJECT</p><h2>Export hasil</h2></div>
+        <button id="closeExportButton" type="button" class="icon-button" aria-label="Tutup">×</button>
+      </div>
+      <p class="export-description">Pilih format yang ingin diunduh dari preview saat ini.</p>
+      <div class="export-options">
+        <button id="exportHtmlButton" type="button" class="export-option">
+          <span class="export-option-icon">⌘</span>
+          <span><strong>Single HTML</strong><small>Semua resource lokal digabung menjadi satu file HTML.</small></span>
+          <i>→</i>
+        </button>
+        <button id="exportImageButton" type="button" class="export-option">
+          <span class="export-option-icon">▣</span>
+          <span><strong>Full-page image</strong><small>Ambil screenshot penuh preview sebagai gambar PNG.</small></span>
+          <i>→</i>
+        </button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/app.js?n=21"></script>
+  <script type="module" src="/app.js?n=24"></script>
 </body>
 </html>
