@@ -14,6 +14,7 @@ const state = {
   resizingPanel: false,
   activeAssistantTurn: null,
   activeToolBlocks: new Map(),
+  pendingImages: [],
 };
 
 const ui = {
@@ -29,6 +30,7 @@ const ui = {
   editorPane: $("#editorPane"), toast: $("#toast"), undoButton: $("#undoButton"),
   exportDialog: $("#exportDialog"), exportButton: $("#exportButton"),
   exportHtmlButton: $("#exportHtmlButton"), exportImageButton: $("#exportImageButton"),
+  imageTray: $("#imageTray"), imageButton: $("#imageButton"), imageInput: $("#imageInput"),
 };
 
 boot();
@@ -59,6 +61,11 @@ function bindEvents() {
     }
   });
   ui.promptInput.addEventListener("input", autoResizePrompt);
+  ui.imageButton.addEventListener("click", () => {
+    if (!state.config?.multimodalConfigured) return notify("Konfigurasi AI multimodal belum tersedia", true);
+    ui.imageInput.click();
+  });
+  ui.imageInput.addEventListener("change", () => addPendingImages(ui.imageInput.files).catch((error) => notify(error.message, true)));
   ui.stopButton.addEventListener("click", stopAgent);
   $("#refreshButton").addEventListener("click", () => refreshPreview());
   $("#openPreviewButton").addEventListener("click", () => window.open(previewUrl(), "_blank", "noopener"));
@@ -109,6 +116,8 @@ async function openSession(id) {
     api(`/api/sessions/${id}/history`),
   ]);
   state.session = session;
+  state.pendingImages = [];
+  renderImageTray();
   ui.sessionsView.hidden = true;
   ui.workspaceView.hidden = false;
   applyChatPanelWidth();
@@ -239,7 +248,7 @@ function renderHistory(history) {
   const toolMap = new Map();
   for (const item of history) {
     if (item.role === "user") {
-      appendUserMessage(item.content);
+      appendUserMessage(item.content, item.attachments || []);
       toolTurn = null;
       toolMap.clear();
       continue;
@@ -253,6 +262,7 @@ function renderHistory(history) {
         setToolArgs(block, call.arguments || "");
         toolMap.set(call.id, block);
       }
+      if (item.model) appendTurnModel(turn, item.model, item.aiMode);
       finalizeAssistantTurn(turn);
       toolTurn = (item.toolCalls || []).length ? turn : null;
       continue;
@@ -268,7 +278,7 @@ function renderHistory(history) {
   scrollChat();
 }
 
-function appendUserMessage(content = "") {
+function appendUserMessage(content = "", attachments = []) {
   $(".chat-empty", ui.chatMessages)?.remove();
   const wrapper = document.createElement("article");
   wrapper.className = "message user";
@@ -277,11 +287,85 @@ function appendUserMessage(content = "") {
   label.textContent = "YOU";
   const body = document.createElement("div");
   body.className = "message-body";
-  body.textContent = content;
+  if (attachments.length) {
+    const gallery = document.createElement("div");
+    gallery.className = "message-images";
+    for (const attachment of attachments) {
+      const image = document.createElement("img");
+      image.src = attachment.url || attachment.dataUrl;
+      image.alt = attachment.name || "Gambar referensi";
+      image.loading = "lazy";
+      gallery.append(image);
+    }
+    body.append(gallery);
+  }
+  if (content) {
+    const text = document.createElement("div");
+    text.className = "user-message-text";
+    text.textContent = content;
+    body.append(text);
+  }
   wrapper.append(label, body);
   ui.chatMessages.append(wrapper);
   scrollChat();
   return wrapper;
+}
+
+async function addPendingImages(fileList) {
+  const files = [...(fileList || [])];
+  ui.imageInput.value = "";
+  if (!files.length) return;
+  const remaining = 4 - state.pendingImages.length;
+  if (remaining <= 0) return notify("Maksimal 4 gambar per turn", true);
+  for (const file of files.slice(0, remaining)) {
+    if (!new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(file.type)) {
+      notify(`Format ${file.name} tidak didukung`, true);
+      continue;
+    }
+    if (file.size > 5_000_000) {
+      notify(`${file.name} melebihi batas 5 MB`, true);
+      continue;
+    }
+    state.pendingImages.push({
+      id: crypto.randomUUID(),
+      name: file.name,
+      type: file.type,
+      dataUrl: await readFileAsDataUrl(file),
+    });
+  }
+  renderImageTray();
+}
+
+function renderImageTray() {
+  if (!ui.imageTray) return;
+  ui.imageTray.replaceChildren();
+  ui.imageTray.hidden = state.pendingImages.length === 0;
+  for (const pending of state.pendingImages) {
+    const item = document.createElement("div");
+    item.className = "image-preview";
+    const image = document.createElement("img");
+    image.src = pending.dataUrl;
+    image.alt = pending.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = `Hapus ${pending.name}`;
+    remove.addEventListener("click", () => {
+      state.pendingImages = state.pendingImages.filter((image) => image.id !== pending.id);
+      renderImageTray();
+    });
+    item.append(image, remove);
+    ui.imageTray.append(item);
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error("Gambar gagal dibaca"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function createAssistantTurn(pending = true) {
@@ -482,16 +566,31 @@ function renderThinkingDotsHtml() {
   return '<span class="thinking-dots"><span></span><span></span><span></span></span>';
 }
 
+function appendTurnModel(turn, model, mode = "primary") {
+  if (!turn || !model) return;
+  $(".turn-model-info", turn.body)?.remove();
+  const info = document.createElement("div");
+  info.className = "turn-model-info";
+  const label = mode === "multimodal" ? "Multimodal" : "Primary";
+  info.textContent = `${model} · ${label}`;
+  turn.body.append(info);
+}
+
 async function sendPrompt(event) {
   event.preventDefault();
   if (state.running || !state.session) return;
-  const prompt = ui.promptInput.value.trim();
+  const typedPrompt = ui.promptInput.value.trim();
+  const images = state.pendingImages.map(({ name, type, dataUrl }) => ({ name, type, dataUrl }));
+  const prompt = typedPrompt || (images.length ? "Gunakan gambar ini sebagai referensi untuk membuat atau memperbarui mockup." : "");
   if (!prompt) return;
   if (!state.config?.aiConfigured) return notify("Isi DEEPSEEK_API_KEY di file .env lalu restart server", true);
+  if (images.length && !state.config?.multimodalConfigured) return notify("Konfigurasi AI multimodal belum tersedia", true);
 
   state.running = true;
   setRunningUi(true);
-  appendUserMessage(prompt);
+  appendUserMessage(prompt, state.pendingImages.map((image) => ({ ...image, url: image.dataUrl })));
+  state.pendingImages = [];
+  renderImageTray();
   ui.promptInput.value = "";
   autoResizePrompt();
   resetTurnUsageDisplay();
@@ -512,7 +611,7 @@ async function sendPrompt(event) {
 
   try {
     const response = await fetch(`/api/sessions/${state.session.id}/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, images }),
     });
     if (!response.ok) throw new Error((await response.json()).error || `Request gagal (${response.status})`);
     await readNdjson(response.body, (eventData) => {
@@ -554,6 +653,9 @@ async function sendPrompt(event) {
       } else if (eventData.type === "usage") {
         state.session.usage = eventData.usage;
         renderUsage(eventData.usage);
+      } else if (eventData.type === "turn_model") {
+        flushBufferedContent();
+        appendTurnModel(ensureAssistantTurn(), eventData.model, eventData.mode);
       } else if (eventData.type === "preview") {
         schedulePreview();
       } else if (eventData.type === "preview_draft") {
@@ -601,6 +703,7 @@ function setRunningUi(running) {
   ui.stopButton.hidden = !running;
   ui.undoButton.disabled = running || !state.session?.checkpointCount;
   ui.exportButton.disabled = running;
+  ui.imageButton.disabled = running;
 }
 
 function openExportDialog() {

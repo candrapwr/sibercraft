@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compactFinalResponse, extractWriteFileDraft, isConversationalPrompt } from "../src/agent.js";
+import { buildRequestUserMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi } from "../src/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);
@@ -27,4 +27,26 @@ test("rangkuman final dibatasi maksimal tiga kalimat dan enam puluh kata", () =>
   const long = compactFinalResponse(Array.from({ length: 80 }, (_, index) => `kata${index}`).join(" "));
   assert.equal(long.replace(/…$/, "").split(/\s+/).length, 60);
   assert.match(long, /…$/);
+});
+
+test("gambar hanya dimasukkan ke payload pada turn multimodal", () => {
+  assert.deepEqual(buildRequestUserMessage("Turn teks", []), { role: "user", content: "Turn teks" });
+  assert.deepEqual(buildRequestUserMessage("Lihat referensi", [{ dataUrl: "data:image/png;base64,AAAA" }]), {
+    role: "user",
+    content: [
+      { type: "text", text: "Lihat referensi" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+    ],
+  });
+});
+
+test("pemilihan AI kembali ke mode utama pada turn teks berikutnya", () => {
+  const config = {
+    apiKey: "primary-key", baseUrl: "https://primary.test", model: "primary-model",
+    multimodal: { apiKey: "vision-key", baseUrl: "https://vision.test", model: "vision-model" },
+  };
+  assert.equal(selectTurnAi(config, {}, true).model, "vision-model");
+  assert.equal(selectTurnAi(config, {}, true).mode, "multimodal");
+  assert.equal(selectTurnAi(config, {}, false).model, "primary-model");
+  assert.equal(selectTurnAi(config, {}, false).mode, "primary");
 });

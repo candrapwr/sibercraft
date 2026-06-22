@@ -43,6 +43,7 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, {
       aiConfigured: Boolean(config.deepseek.apiKey),
       model: config.deepseek.model,
+      multimodalConfigured: Boolean(config.deepseek.multimodal.apiKey && config.deepseek.multimodal.model),
     });
   }
   if (method === "GET" && url.pathname === "/api/sessions") {
@@ -75,7 +76,7 @@ async function handleApi(request, response, url) {
   }
   if (method === "GET" && action === "history") {
     const history = await store.history(id);
-    return sendJson(response, 200, history.map(toPublicMessage).filter(Boolean));
+    return sendJson(response, 200, history.map((message) => toPublicMessage(message, id)).filter(Boolean));
   }
   if (method === "GET" && action === "files") {
     return sendJson(response, 200, await store.listFiles(id));
@@ -143,12 +144,21 @@ async function handleApi(request, response, url) {
 
 async function streamChat(request, response, id) {
   if (activeRuns.has(id)) throw new HttpError(409, "AI masih bekerja pada sesi ini");
-  const body = await readJson(request);
-  const prompt = String(body.prompt || "").trim();
-  if (!prompt) throw new HttpError(400, "Prompt wajib diisi");
+  const body = await readJson(request, 16_000_000);
+  const imagePayloads = parseImagePayloads(body.images);
+  const prompt = String(body.prompt || "").trim() || (imagePayloads.length ? "Gunakan gambar ini sebagai referensi untuk membuat atau memperbarui mockup." : "");
+  if (!prompt) throw new HttpError(400, "Prompt atau gambar wajib diisi");
   if (prompt.length > 20_000) throw new HttpError(413, "Prompt terlalu panjang");
+  if (imagePayloads.length && !(config.deepseek.multimodal.apiKey && config.deepseek.multimodal.model)) {
+    throw new HttpError(400, "Model multimodal belum dikonfigurasi");
+  }
   const session = await store.get(id);
   const history = await store.history(id);
+  const images = [];
+  for (const image of imagePayloads) {
+    const attachment = await store.saveUploadedImage(id, image);
+    images.push({ ...attachment, dataUrl: image.dataUrl });
+  }
   const checkpoint = isConversationalPrompt(prompt)
     ? null
     : await store.createCheckpoint(id, history.length);
@@ -187,6 +197,7 @@ async function streamChat(request, response, id) {
       session,
       store,
       prompt,
+      images,
       config: config.deepseek,
       signal: controller.signal,
       emit,
@@ -263,8 +274,16 @@ async function servePublic(response, pathname) {
   response.end(content);
 }
 
-function toPublicMessage(message) {
-  if (message.role === "user") return { role: "user", content: message.content };
+function toPublicMessage(message, sessionId) {
+  if (message.role === "user") return {
+    role: "user",
+    content: message.content,
+    attachments: (message.attachments || []).map((attachment) => ({
+      name: attachment.name,
+      type: attachment.type,
+      url: `/preview/${sessionId}/${attachment.path.split("/").map(encodeURIComponent).join("/")}`,
+    })),
+  };
   if (message.role === "assistant") {
     const calls = (message.tool_calls || []).map((call) => ({
       id: call.id,
@@ -272,7 +291,13 @@ function toPublicMessage(message) {
       arguments: call.function?.arguments || "",
     }));
     if (!message.content?.trim() && !calls.length) return null;
-    return { role: "assistant", content: message.content || "", toolCalls: calls };
+    return {
+      role: "assistant",
+      content: message.content || "",
+      toolCalls: calls,
+      model: message.model || "",
+      aiMode: message.ai_mode || "",
+    };
   }
   if (message.role === "tool") return {
     role: "tool",
@@ -281,6 +306,24 @@ function toPublicMessage(message) {
     content: publicToolResult(message.name, String(message.content)),
   };
   return null;
+}
+
+function parseImagePayloads(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new HttpError(400, "Payload gambar tidak valid");
+  if (value.length > 4) throw new HttpError(400, "Maksimal 4 gambar per turn");
+  let totalSize = 0;
+  return value.map((item) => {
+    const name = String(item?.name || "image").slice(0, 120);
+    const dataUrl = String(item?.dataUrl || "");
+    const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([a-z0-9+/=]+)$/i.exec(dataUrl);
+    if (!match) throw new HttpError(400, "Format gambar tidak didukung");
+    const buffer = Buffer.from(match[2], "base64");
+    if (!buffer.length || buffer.length > 5_000_000) throw new HttpError(413, "Ukuran setiap gambar maksimal 5 MB");
+    totalSize += buffer.length;
+    if (totalSize > 12_000_000) throw new HttpError(413, "Total gambar maksimal 12 MB per turn");
+    return { name, type: match[1].toLowerCase(), dataUrl, buffer };
+  });
 }
 
 function publicToolResult(name, result) {
