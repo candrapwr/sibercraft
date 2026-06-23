@@ -6,7 +6,7 @@ export class DeepSeekClient {
   }
 
   async complete({ messages, tools, signal, onContent, onToolCall }) {
-    if (!this.apiKey) throw new Error("DEEPSEEK_API_KEY belum dikonfigurasi di file .env");
+    if (!this.apiKey) throw new Error("PRIMARY_API_KEY belum dikonfigurasi di file .env");
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -25,9 +25,9 @@ export class DeepSeekClient {
 
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 1500);
-      throw new Error(`DeepSeek API ${response.status}: ${detail}`);
+      throw new Error(`Primary AI API ${response.status}: ${detail}`);
     }
-    if (!response.body) throw new Error("DeepSeek mengembalikan response kosong");
+    if (!response.body) throw new Error("Primary AI mengembalikan response kosong");
 
     let content = "";
     let finishReason = "stop";
