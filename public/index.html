@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1180">
   <meta name="color-scheme" content="dark light">
   <title>SiberCraft — AI Mockup Workspace</title>
-  <link rel="stylesheet" href="/styles.css?n=31">
+  <link rel="stylesheet" href="/styles.css?n=32">
 </head>
 <body>
   <section id="sessionsView" class="sessions-view">
@@ -13,8 +13,12 @@
       <div class="landing-nav-inner">
         <a class="brand" href="#" aria-label="SiberCraft home"><span class="brand-mark">S</span><span>SiberCraft</span><small>AI workspace</small></a>
         <div class="nav-actions">
-          <span id="aiStatus" class="status-pill"><i></i><span>Memeriksa AI</span></span>
-          <button id="openCreateButton" class="button button-primary"><span>＋</span>Sesi baru</button>
+          <div class="language-switch" aria-label="Language switch">
+            <button type="button" class="language-option active" data-language-option="en">EN</button>
+            <button type="button" class="language-option" data-language-option="id">ID</button>
+          </div>
+          <span id="aiStatus" class="status-pill"><i></i><span>Checking AI</span></span>
+          <button id="openCreateButton" class="button button-primary"><span>＋</span>New project</button>
         </div>
       </div>
     </header>
@@ -23,15 +27,15 @@
       <section class="landing-hero">
         <div class="hero-content">
           <div class="hero-badge"><span>✦</span> AI-powered design workspace</div>
-          <h1>Dari ide menjadi<br><em>interface nyata.</em></h1>
-          <p class="hero-copy">Rancang mockup, dashboard, chart, dan diagram melalui percakapan. Lihat setiap perubahan secara langsung, revisi dengan cepat, lalu export hasilnya.</p>
+          <h1>From ideas to<br><em>real interfaces.</em></h1>
+          <p class="hero-copy">Design mockups, dashboards, charts, and diagrams through conversation. See every change live, revise quickly, then export the result.</p>
           <div class="hero-actions">
-            <button class="button button-primary button-large" data-create><span>＋</span>Mulai sesi baru</button>
-            <a class="button button-secondary button-large" href="#recentSessions">Lihat workspace <span>↓</span></a>
+            <button class="button button-primary button-large" data-create><span>＋</span>Start new project</button>
+            <a class="button button-secondary button-large" href="#recentSessions">View project <span>↓</span></a>
           </div>
-          <div class="hero-capabilities" aria-label="Fitur utama">
+          <div class="hero-capabilities" aria-label="Key features">
             <span><i>01</i> Live preview</span>
-            <span><i>02</i> Session history</span>
+            <span><i>02</i> Project history</span>
             <span><i>03</i> Export ready</span>
           </div>
         </div>
@@ -46,10 +50,10 @@
             <div class="product-body">
               <div class="product-chat">
                 <span class="product-label">PROMPT</span>
-                <div class="product-message user-preview">Buat dashboard analytics modern dengan chart dan tabel transaksi.</div>
+                <div class="product-message user-preview">Build a modern analytics dashboard with charts and a transaction table.</div>
                 <div class="product-ai-line"><i></i><span></span><span></span></div>
                 <div class="product-tool"><span>⌘</span><div><b>3 tool calls</b><small>Writing interface files</small></div><i></i></div>
-                <div class="product-composer"><span>Jelaskan perubahan...</span><b>↑</b></div>
+                <div class="product-composer"><span>Describe the changes...</span><b>↑</b></div>
               </div>
               <div class="product-preview">
                 <div class="mini-sidebar"><b>S</b><span></span><span></span><span></span></div>
@@ -69,14 +73,14 @@
 
       <section id="recentSessions" class="sessions-section">
         <div class="section-heading">
-          <div><p class="kicker">YOUR WORKSPACES</p><h2>Lanjutkan pekerjaan</h2><p class="section-copy">Semua percakapan, preview, dan resource tersimpan sesuai sesinya.</p></div>
-          <div class="section-actions"><span id="sessionCount" class="count-label">0 sesi</span><button class="section-create" data-create>＋ Buat baru</button></div>
+          <div><p class="kicker">YOUR PROJECTS</p><h2>Continue your projects</h2><p class="section-copy">All conversations, previews, and resources are stored per project.</p></div>
+          <div class="section-actions"><span id="sessionCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
         </div>
         <div id="sessionGrid" class="session-grid"></div>
         <div id="emptySessions" class="empty-sessions" hidden>
           <div class="empty-visual"><span>✦</span><i></i><i></i></div>
-          <div><p class="kicker">START CREATING</p><h3>Workspace pertama menunggu ide Anda.</h3><p>Jelaskan tampilan yang ingin dibuat dan biarkan AI menyiapkan interface serta live preview-nya.</p></div>
-          <button class="button button-primary" data-create><span>＋</span>Buat sesi pertama</button>
+          <div><p class="kicker">START CREATING</p><h3>Your first project is waiting.</h3><p>Describe the interface you want and let the AI prepare the files and live preview.</p></div>
+          <button class="button button-primary" data-create><span>＋</span>Create first project</button>
         </div>
       </section>
     </main>
@@ -89,51 +93,55 @@
   <section id="workspaceView" class="workspace-view" hidden>
     <header class="workspace-header">
       <div class="workspace-identity">
-        <button id="backButton" class="icon-button" title="Kembali ke sesi" aria-label="Kembali">←</button>
+        <button id="backButton" class="icon-button" title="Back to projects" aria-label="Back">←</button>
         <a class="brand compact" href="#"><span class="brand-mark">S</span></a>
         <span class="header-divider"></span>
-        <div><span class="header-label">SESSION</span><strong id="workspaceName">Workspace</strong></div>
+        <div><span class="header-label">PROJECT</span><strong id="workspaceName">Project</strong></div>
       </div>
       <div class="workspace-actions">
+        <div class="language-switch" aria-label="Language switch">
+          <button type="button" class="language-option active" data-language-option="en">EN</button>
+          <button type="button" class="language-option" data-language-option="id">ID</button>
+        </div>
         <span id="usageBadge" class="topbar-tokens" hidden title="Token usage">
           <span id="usagePrompt" class="token-prompt">0</span>
           <span class="token-sep">/</span>
           <span id="usageCompletion" class="token-completion">0</span>
         </span>
         <span id="workspaceStatus" class="workspace-status"><i></i><span>Ready</span></span>
-        <button id="undoButton" class="header-button" title="Batalkan prompt terakhir">↶ <span>Undo</span></button>
+        <button id="undoButton" class="header-button" title="Undo the last prompt">↶ <span>Undo</span></button>
         <button id="filesButton" class="header-button">⌘ <span>Files</span></button>
         <button id="exportButton" class="header-button">⇩ <span>Export</span></button>
-        <button id="deleteButton" class="icon-button danger" title="Hapus sesi" aria-label="Hapus sesi">×</button>
+        <button id="deleteButton" class="icon-button danger" title="Delete project" aria-label="Delete project">×</button>
       </div>
     </header>
 
     <main class="workspace-main">
       <aside class="chat-panel">
         <div class="chat-scroll-region">
-          <div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Histori percakapan"></div>
+          <div id="chatMessages" class="chat-messages" tabindex="0" aria-label="Conversation history"></div>
         </div>
         <div class="prompt-area">
           <form id="promptForm" class="prompt-form">
             <div id="imageTray" class="image-tray" hidden></div>
-            <textarea id="promptInput" rows="1" maxlength="20000" placeholder="Jelaskan mockup atau gunakan gambar referensi..."></textarea>
+            <textarea id="promptInput" rows="1" maxlength="20000" placeholder="Describe the mockup or use reference images..."></textarea>
             <div class="prompt-footer">
-              <button id="imageButton" class="image-button" type="button" title="Tambahkan gambar" aria-label="Tambahkan gambar">
+              <button id="imageButton" class="image-button" type="button" title="Add images" aria-label="Add images">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="m5.5 17 4.2-4 3.1 2.8 2.3-2.1 3.4 3.3"></path></svg>
               </button>
               <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-              <span><kbd>Enter</kbd> kirim</span>
-              <button id="sendButton" class="send-button" type="submit" aria-label="Kirim prompt">↑</button>
+              <span><kbd>Enter</kbd> send</span>
+              <button id="sendButton" class="send-button" type="submit" aria-label="Send prompt">↑</button>
               <button id="stopButton" class="stop-button" type="button" hidden>■ Stop</button>
             </div>
           </form>
         </div>
       </aside>
-      <div id="panelResizeHandle" class="panel-resize-handle" role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel chat" tabindex="0"></div>
+      <div id="panelResizeHandle" class="panel-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize chat panel" tabindex="0"></div>
 
       <section class="preview-panel">
         <div class="preview-toolbar">
-          <div class="viewport-tabs" aria-label="Ukuran preview">
+          <div class="viewport-tabs" aria-label="Preview size">
             <button class="active" data-viewport="desktop" title="Desktop" aria-label="Desktop">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="11" rx="1.75"></rect><path d="M9 19h6"></path><path d="M12 16v3"></path></svg>
               <span>Desktop</span>
@@ -148,22 +156,22 @@
           <div class="preview-address"><i></i><span id="previewAddress">/index.html</span></div>
           <div class="toolbar-actions">
             <button id="refreshButton" title="Refresh preview">↻</button>
-            <button id="openPreviewButton" title="Buka di tab baru">↗</button>
+            <button id="openPreviewButton" title="Open in new tab">↗</button>
           </div>
         </div>
         <div id="previewStage" class="preview-stage">
-          <div id="previewLoading" class="preview-loading"><span></span><p>Memuat preview</p></div>
+          <div id="previewLoading" class="preview-loading"><span></span><p>Loading preview</p></div>
           <div id="deviceFrame" class="device-frame desktop">
             <iframe id="previewFrame" title="Live preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
           </div>
         </div>
 
         <aside id="filesDrawer" class="files-drawer" aria-hidden="true">
-          <header><div><span class="header-label">SESSION RESOURCE</span><h3>Files</h3></div><button id="closeFilesButton" class="icon-button">×</button></header>
+          <header><div><span class="header-label">PROJECT RESOURCE</span><h3>Files</h3></div><button id="closeFilesButton" class="icon-button">×</button></header>
           <div class="file-workspace">
             <nav id="fileList" class="file-list"></nav>
             <section id="editorPane" class="editor-pane">
-              <div class="editor-empty"><span>⌘</span><p>Pilih file untuk melihat source</p></div>
+              <div class="editor-empty"><span>⌘</span><p>Select a file to inspect the source</p></div>
             </section>
           </div>
         </aside>
@@ -173,40 +181,40 @@
 
   <dialog id="createDialog" class="dialog">
     <form id="createForm" method="dialog">
-      <div class="dialog-head"><div><p class="kicker">NEW WORKSPACE</p><h2>Buat sesi</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
-      <label class="field"><span>Nama sesi</span><input id="sessionName" name="name" maxlength="80" placeholder="Contoh: Dashboard penjualan" autofocus required></label>
-      <fieldset><legend>Mulai dari</legend><div class="template-options">
-        <label><input type="radio" name="template" value="blank" checked><span><i class="blank-template"></i><b>Blank canvas</b><small>Mulai dari halaman kosong</small></span></label>
-        <label><input type="radio" name="template" value="dashboard"><span><i class="dashboard-template"></i><b>Dashboard</b><small>Struktur dashboard dasar</small></span></label>
+      <div class="dialog-head"><div><p class="kicker">NEW PROJECT</p><h2>Create project</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
+      <label class="field"><span>Project name</span><input id="sessionName" name="name" maxlength="80" placeholder="Example: Sales dashboard" autofocus required></label>
+      <fieldset><legend>Start from</legend><div class="template-options">
+        <label><input type="radio" name="template" value="blank" checked><span><i class="blank-template"></i><b>Blank canvas</b><small>Start from an empty page</small></span></label>
+        <label><input type="radio" name="template" value="dashboard"><span><i class="dashboard-template"></i><b>Dashboard</b><small>Basic dashboard structure</small></span></label>
       </div></fieldset>
-      <div class="dialog-actions"><button type="button" class="button button-ghost" data-close-dialog>Batal</button><button type="submit" class="button button-dark">Buat sesi <span>→</span></button></div>
+      <div class="dialog-actions"><button type="button" class="button button-ghost" data-close-dialog>Cancel</button><button type="submit" class="button button-dark">Create project <span>→</span></button></div>
     </form>
   </dialog>
 
   <dialog id="exportDialog" class="dialog export-dialog">
     <div class="export-dialog-content">
       <div class="dialog-head">
-        <div><p class="kicker">EXPORT PROJECT</p><h2>Export hasil</h2></div>
-        <button id="closeExportButton" type="button" class="icon-button" aria-label="Tutup">×</button>
+        <div><p class="kicker">EXPORT PROJECT</p><h2>Export result</h2></div>
+        <button id="closeExportButton" type="button" class="icon-button" aria-label="Close">×</button>
       </div>
-      <p class="export-description">Pilih format yang ingin diunduh dari preview saat ini.</p>
+      <p class="export-description">Choose the format you want to download from the current preview.</p>
       <div class="export-options">
         <button id="exportHtmlButton" type="button" class="export-option">
           <span class="export-option-icon">⌘</span>
-          <span><strong>Single HTML</strong><small>Semua resource lokal digabung menjadi satu file HTML.</small></span>
+          <span><strong>Single HTML</strong><small>All local resources are bundled into one HTML file.</small></span>
           <i>→</i>
         </button>
         <button id="exportImageButton" type="button" class="export-option">
           <span class="export-option-icon">▣</span>
-          <span><strong>Full-page image</strong><small>Ambil screenshot penuh preview sebagai gambar PNG.</small></span>
+          <span><strong>Full-page image</strong><small>Capture the full preview as a PNG image.</small></span>
           <i>→</i>
         </button>
       </div>
     </div>
   </dialog>
 
-  <div id="imageLightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-label="Pratinjau gambar" hidden>
-    <button id="closeImageLightbox" class="image-lightbox-close" type="button" aria-label="Tutup pratinjau gambar">×</button>
+  <div id="imageLightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>
+    <button id="closeImageLightbox" class="image-lightbox-close" type="button" aria-label="Close image preview">×</button>
     <figure class="image-lightbox-content">
       <img id="lightboxImage" alt="">
       <figcaption id="lightboxCaption"></figcaption>
@@ -214,6 +222,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/app.js?n=31"></script>
+  <script type="module" src="/app.js?n=32"></script>
 </body>
 </html>
