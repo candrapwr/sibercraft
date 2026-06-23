@@ -245,7 +245,7 @@ function safeJson(value) {
 }
 
 function summarize(value) {
-  return value.length > 240 ? `${value.slice(0, 237)}...` : value;
+  return value.length > 1240 ? `${value.slice(0, 237)}...` : value;
 }
 
 function presentToolResult(name, result) {
