@@ -1,8 +1,9 @@
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
+import { captureWebpageScreenshot } from "./web-screenshot.js";
 
-export function createFileTools(workspaceDir, onMutation = () => {}) {
+export function createFileTools(workspaceDir, onMutation = () => {}, options = {}) {
   const tools = [
     tool("list_dir", "List files and folders inside a workspace directory (non-recursive).", {
       type: "object",
@@ -94,6 +95,37 @@ export function createFileTools(workspaceDir, onMutation = () => {}) {
       await onMutation(destination);
       return `Berhasil menyalin ${source} ke ${destination}`;
     }, true),
+    ...(options.webScreenshot?.enabled ? [
+      tool(
+        "capture_webpage_screenshot",
+        "Capture a public website URL as a PNG screenshot, save it inside the session workspace, and make the image available as visual context. Use this when the user asks to recreate, imitate, inspect, or take inspiration from a website URL.",
+        {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "Full public http or https URL of the webpage to capture",
+            },
+          },
+          required: ["url"],
+          additionalProperties: false,
+        },
+        async ({ url }) => {
+          const image = await captureWebpageScreenshot({
+            workspaceDir,
+            url,
+            endpoint: options.webScreenshot.endpoint,
+            signal: options.signal,
+          });
+          await onMutation(image.path);
+          return {
+            result: `Screenshot ${image.sourceUrl} disimpan ke ${image.path} (${image.size} byte)`,
+            artifacts: [{ kind: "image", ...image }],
+          };
+        },
+        true,
+      ),
+    ] : []),
   ];
 
   return {
@@ -106,10 +138,17 @@ export function createFileTools(workspaceDir, onMutation = () => {}) {
       if (!selected) return { result: `Error: tool ${name} tidak tersedia`, mutated: false };
       try {
         const args = rawArguments?.trim() ? JSON.parse(rawArguments) : {};
-        const result = await selected.execute(args);
-        return { result: String(result).slice(0, 400_000), mutated: selected.mutates };
+        const output = await selected.execute(args);
+        if (output && typeof output === "object" && !Buffer.isBuffer(output)) {
+          return {
+            result: String(output.result || "").slice(0, 400_000),
+            mutated: selected.mutates,
+            artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
+          };
+        }
+        return { result: String(output).slice(0, 400_000), mutated: selected.mutates, artifacts: [] };
       } catch (error) {
-        return { result: `Error: ${error.message}`, mutated: false };
+        return { result: `Error: ${error.message}`, mutated: false, artifacts: [] };
       }
     },
   };

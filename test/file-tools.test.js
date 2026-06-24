@@ -23,3 +23,15 @@ test("file tools menulis dan mengedit file serta melaporkan mutation", async (t)
   assert.match(escaped.result, /^Error:/);
   assert.equal(escaped.mutated, false);
 });
+
+test("tool screenshot hanya tersedia ketika integrasi visual diaktifkan", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-webshot-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const disabled = createFileTools(root);
+  assert.equal(disabled.schemas.some((item) => item.function.name === "capture_webpage_screenshot"), false);
+
+  const enabled = createFileTools(root, () => {}, {
+    webScreenshot: { enabled: true, endpoint: "https://snap.idsiber.com/api/screenshot" },
+  });
+  assert.equal(enabled.schemas.some((item) => item.function.name === "capture_webpage_screenshot"), true);
+});

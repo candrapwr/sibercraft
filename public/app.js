@@ -113,6 +113,7 @@ const translations = {
     toolWriteFile: "Writing file",
     toolEditFile: "Editing file",
     toolCopyFile: "Copying file",
+    toolCaptureWebpage: "Capturing website screenshot",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 projects",
   },
@@ -225,6 +226,7 @@ const translations = {
     toolWriteFile: "Writing file",
     toolEditFile: "Editing file",
     toolCopyFile: "Copying file",
+    toolCaptureWebpage: "Mengambil screenshot website",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 proyek",
   },
@@ -654,7 +656,8 @@ function renderHistory(history) {
         setToolArgs(block, call.arguments || "");
         toolMap.set(call.id, block);
       }
-      if (item.model) appendTurnModel(turn, item.model, item.aiMode);
+      if (item.modelsUsed?.length) appendTurnModels(turn, item.modelsUsed);
+      else if (item.model) appendTurnModels(turn, [{ model: item.model, mode: item.aiMode }]);
       finalizeAssistantTurn(turn);
       toolTurn = (item.toolCalls || []).length ? turn : null;
       continue;
@@ -832,6 +835,8 @@ function createTextSegment(turn) {
   block.className = "message-segment";
   if (turn.toolGroup?.isConnected) {
     turn.body.insertBefore(block, turn.toolGroup);
+  } else if ($(".turn-model-info", turn.body)) {
+    turn.body.insertBefore(block, $(".turn-model-info", turn.body));
   } else {
     turn.body.append(block);
   }
@@ -951,7 +956,9 @@ function ensureToolGroup(turn) {
     $(".tool-group-items", group).hidden = expanded;
     $(".tool-group-chevron", group).classList.toggle("rotated", !expanded);
   });
-  turn.body.append(group);
+  const modelInfo = $(".turn-model-info", turn.body);
+  if (modelInfo) turn.body.insertBefore(group, modelInfo);
+  else turn.body.append(group);
   turn.toolGroup = group;
   return group;
 }
@@ -980,13 +987,16 @@ function renderThinkingDotsHtml() {
   return '<span class="thinking-dots"><span></span><span></span><span></span></span>';
 }
 
-function appendTurnModel(turn, model, mode = "primary") {
-  if (!turn || !model) return;
+function appendTurnModels(turn, models) {
+  const sequence = (models || []).filter((item) => item?.model);
+  if (!turn || !sequence.length) return;
   $(".turn-model-info", turn.body)?.remove();
   const info = document.createElement("div");
   info.className = "turn-model-info";
-  const label = mode === "multimodal" ? t("multimodal") : t("primary");
-  info.textContent = `${model} · ${label}`;
+  info.textContent = sequence.map(({ model, mode }) => {
+    const label = mode === "multimodal" ? t("multimodal") : t("primary");
+    return `${model} · ${label}`;
+  }).join(" → ");
   turn.body.append(info);
 }
 
@@ -1067,9 +1077,12 @@ async function sendPrompt(event) {
       } else if (eventData.type === "usage") {
         state.session.usage = eventData.usage;
         renderUsage(eventData.usage);
+      } else if (eventData.type === "iteration_model") {
+        flushBufferedContent();
+        appendTurnModels(ensureAssistantTurn(), [{ model: eventData.model, mode: eventData.mode }]);
       } else if (eventData.type === "turn_model") {
         flushBufferedContent();
-        appendTurnModel(ensureAssistantTurn(), eventData.model, eventData.mode);
+        appendTurnModels(ensureAssistantTurn(), eventData.models || []);
       } else if (eventData.type === "preview") {
         schedulePreview();
       } else if (eventData.type === "preview_draft") {
@@ -1404,7 +1417,7 @@ function scrollChat(immediate = false) {
   if (immediate) update();
   else requestAnimationFrame(update);
 }
-function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile") })[name] || name; }
+function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile"), capture_webpage_screenshot: t("toolCaptureWebpage") })[name] || name; }
 function formatDate(value) { return new Intl.DateTimeFormat(state.language === "id" ? "id-ID" : "en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
 function formatBytes(bytes) { return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`; }
 function formatCompactTokens(value) {
