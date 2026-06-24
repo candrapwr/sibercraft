@@ -15,6 +15,7 @@ Working rules:
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
 - For flowcharts, process flows, sequence diagrams, state diagrams, user journeys, class diagrams, ER diagrams, timelines, or similar diagram requests, use Mermaid.js by default unless the user explicitly requests another diagram library or implementation. Load Mermaid from an HTTPS CDN, use valid Mermaid syntax, initialize it in the browser, and keep the diagram responsive inside its container.
 - When the current user turn includes images, inspect them carefully and use them as visual references. Recreate the relevant layout, content, colors, hierarchy, and interaction requested by the user instead of merely describing the images.
+- When the user provides a website URL and asks to recreate, imitate, inspect, or take visual inspiration from it, use capture_webpage_screenshot first. The captured PNG becomes visual context on the next iteration; inspect that image before implementing the design.
 - Never access secret APIs, the host filesystem, Node.js APIs, or the parent window from preview code.
 - If older user messages include a [SUMMARY] block, treat it only as a record of which tools ran in that past turn. Do not assume the old file contents or tool results are still current; re-run tools when actual details are needed.
 - Finish all requested changes before giving the final answer.
@@ -29,12 +30,12 @@ export function isConversationalPrompt(prompt) {
   return /^(halo|hai|hi|hello|hey|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|terima kasih|makasih|thanks|thank you|apa kabar)$/.test(normalized);
 }
 
-export async function runAgent({ session, store, prompt, images = [], config, signal, emit }) {
+export async function runAgent({ session, store, prompt, images = [], config, webScreenshot, signal, emit }) {
   const workspaceDir = store.workspaceDir(session.id);
   const hasImages = images.length > 0;
   const conversational = !hasImages && isConversationalPrompt(prompt);
-  const turnAi = selectTurnAi(config, session, hasImages);
-  if (hasImages && (!turnAi.apiKey || !turnAi.model)) {
+  const multimodalConfigured = Boolean(config.multimodal?.apiKey && config.multimodal?.model);
+  if (hasImages && !multimodalConfigured) {
     throw new Error("Model multimodal belum dikonfigurasi");
   }
   let mutated = false;
@@ -42,14 +43,16 @@ export async function runAgent({ session, store, prompt, images = [], config, si
     mutated = true;
     await store.update(session.id, { status: "working" });
     emit({ type: "preview", path });
-  });
-  const client = new DeepSeekClient({
-    apiKey: turnAi.apiKey,
-    baseUrl: turnAi.baseUrl,
-    model: turnAi.model,
+  }, {
+    signal,
+    webScreenshot: {
+      enabled: Boolean(webScreenshot?.endpoint && multimodalConfigured),
+      endpoint: webScreenshot?.endpoint,
+    },
   });
   const previousHistory = await store.history(session.id);
   const history = [...previousHistory];
+  const requestHistory = [];
   const sessionUsage = session.usage || emptyUsage();
   const userMessage = {
     role: "user",
@@ -60,7 +63,6 @@ export async function runAgent({ session, store, prompt, images = [], config, si
   history.push(userMessage);
   await store.saveHistory(session.id, history);
   await store.update(session.id, { status: "working", lastPrompt: prompt.slice(0, 140) });
-  const snapshotEndIndex = history.length;
   const optimizedBase = conversational
     ? { messages: previousHistory.map(toModelMessage), stats: { collapsedCount: 0, bytesSaved: 0 } }
     : optimizeContext(previousHistory, config.contextOptimize);
@@ -74,17 +76,33 @@ export async function runAgent({ session, store, prompt, images = [], config, si
   });
 
   const requestBase = () => {
-    const base = [...optimizedBase.messages, requestUserMessage, ...history.slice(snapshotEndIndex)];
+    const base = [...optimizedBase.messages, requestUserMessage, ...requestHistory.map(toModelMessage)];
     return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...base];
   };
   let finalText = "";
   let usage = null;
   let turnPromptTokens = 0;
   let turnCompletionTokens = 0;
+  let visualContextAvailable = hasImages;
+  const modelsUsed = [];
 
   try {
     for (let iteration = 0; iteration < config.maxIterations; iteration++) {
+      const iterationAi = selectTurnAi(config, session, visualContextAvailable);
+      if (visualContextAvailable && (!iterationAi.apiKey || !iterationAi.model)) {
+        throw new Error("Model multimodal belum dikonfigurasi");
+      }
+      const client = new DeepSeekClient({
+        apiKey: iterationAi.apiKey,
+        baseUrl: iterationAi.baseUrl,
+        model: iterationAi.model,
+      });
+      const lastModel = modelsUsed.at(-1);
+      if (!lastModel || lastModel.model !== iterationAi.model || lastModel.mode !== iterationAi.mode) {
+        modelsUsed.push({ model: iterationAi.model, mode: iterationAi.mode });
+      }
       emit({ type: "status", status: iteration === 0 ? "thinking" : "working" });
+      emit({ type: "iteration_model", iteration: iteration + 1, model: iterationAi.model, mode: iterationAi.mode });
       emit({ type: "assistant_start" });
       const messages = requestBase();
       if (config.requestLogging) {
@@ -102,8 +120,8 @@ export async function runAgent({ session, store, prompt, images = [], config, si
                 bytesSaved: optimizedBase.stats.bytesSaved,
               },
           request: {
-            model: turnAi.model,
-            mode: turnAi.mode,
+            model: iterationAi.model,
+            mode: iterationAi.mode,
             stream: true,
             stream_options: { include_usage: true },
             toolCount: conversational ? 0 : tools.schemas.length,
@@ -171,16 +189,18 @@ export async function runAgent({ session, store, prompt, images = [], config, si
         emit({ type: "content", delta: completion.message.content });
       }
       const isFinalResponse = !calls.length || completion.finishReason !== "tool_calls";
+      completion.message.model = iterationAi.model;
+      completion.message.ai_mode = iterationAi.mode;
       if (isFinalResponse) {
         const compact = compactFinalResponse(completion.message.content || "Selesai.");
         if (compact !== completion.message.content) {
           completion.message.content = compact;
           emit({ type: "final_content", content: compact });
         }
-        completion.message.model = turnAi.model;
-        completion.message.ai_mode = turnAi.mode;
+        completion.message.models_used = modelsUsed;
       }
       history.push(completion.message);
+      requestHistory.push(completion.message);
       await store.saveHistory(session.id, history);
       if (isFinalResponse) {
         finalText = completion.message.content || "Selesai.";
@@ -196,7 +216,7 @@ export async function runAgent({ session, store, prompt, images = [], config, si
         };
         await store.update(session.id, { status: "ready", usage: nextUsage });
         emit({ type: "usage", usage: nextUsage });
-        emit({ type: "turn_model", model: turnAi.model, mode: turnAi.mode });
+        emit({ type: "turn_model", models: modelsUsed });
         emit({ type: "assistant_end" });
         emit({ type: "done", message: finalText, usage });
         return { mutated };
@@ -216,16 +236,24 @@ export async function runAgent({ session, store, prompt, images = [], config, si
       }
       await flushStreamFrame(signal);
 
+      const capturedImages = [];
       for (const [callIndex, call] of calls.entries()) {
         const name = call.function?.name || "unknown";
-        const { result, mutated } = await tools.execute(name, call.function?.arguments || "{}");
+        const { result, mutated, artifacts = [] } = await tools.execute(name, call.function?.arguments || "{}");
         if (name === "write_file") {
           const draft = extractWriteFileDraft(call.function?.arguments || "{}");
           if (draft) emit({ type: "preview_draft_clear", path: draft.path });
         }
-        history.push({ role: "tool", tool_call_id: call.id, name, content: result });
+        const toolMessage = { role: "tool", tool_call_id: call.id, name, content: result };
+        history.push(toolMessage);
+        requestHistory.push(toolMessage);
         await store.saveHistory(session.id, history);
         emit({ type: "tool_result", callIndex, name, result: presentToolResult(name, result), mutated });
+        capturedImages.push(...artifacts.filter((artifact) => artifact.kind === "image" && artifact.dataUrl));
+      }
+      if (capturedImages.length) {
+        visualContextAvailable = true;
+        requestHistory.push(buildRuntimeVisualMessage(capturedImages));
       }
       emit({ type: "iteration_end" });
     }
@@ -233,14 +261,6 @@ export async function runAgent({ session, store, prompt, images = [], config, si
   } catch (error) {
     await store.update(session.id, { status: "error" });
     throw error;
-  }
-}
-
-function safeJson(value) {
-  try {
-    return JSON.parse(value || "{}");
-  } catch {
-    return {};
   }
 }
 
@@ -291,6 +311,7 @@ function toolVerb(name) {
     write_file: "Saya akan menulis perubahan ke file",
     edit_file: "Saya akan mengedit file yang diperlukan",
     copy_file: "Saya akan menyalin file yang dibutuhkan",
+    capture_webpage_screenshot: "Saya akan mengambil screenshot website sebagai referensi visual",
   })[name] || "Saya akan menjalankan tool yang diperlukan";
 }
 
@@ -353,6 +374,19 @@ export function buildRequestUserMessage(prompt, images = []) {
     role: "user",
     content: [
       { type: "text", text: prompt },
+      ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } })),
+    ],
+  };
+}
+
+export function buildRuntimeVisualMessage(images) {
+  return {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: "Screenshot website berikut dihasilkan oleh tool pada turn ini. Analisis gambar ini sebagai referensi visual dan lanjutkan permintaan user.",
+      },
       ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } })),
     ],
   };

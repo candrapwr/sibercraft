@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRequestUserMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi } from "../src/agent.js";
+import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi } from "../src/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);
@@ -49,4 +49,14 @@ test("pemilihan AI kembali ke mode utama pada turn teks berikutnya", () => {
   assert.equal(selectTurnAi(config, {}, true).mode, "multimodal");
   assert.equal(selectTurnAi(config, {}, false).model, "primary-model");
   assert.equal(selectTurnAi(config, {}, false).mode, "primary");
+});
+
+test("screenshot hasil tool dibentuk sebagai visual context untuk iterasi berikutnya", () => {
+  const message = buildRuntimeVisualMessage([{ dataUrl: "data:image/png;base64,AAAA" }]);
+  assert.equal(message.role, "user");
+  assert.match(message.content[0].text, /Screenshot website/);
+  assert.deepEqual(message.content[1], {
+    type: "image_url",
+    image_url: { url: "data:image/png;base64,AAAA" },
+  });
 });

@@ -201,6 +201,7 @@ async function streamChat(request, response, id) {
       prompt,
       images,
       config: config.deepseek,
+      webScreenshot: config.webScreenshot,
       signal: controller.signal,
       emit,
     });
@@ -299,6 +300,7 @@ function toPublicMessage(message, sessionId) {
       toolCalls: calls,
       model: message.model || "",
       aiMode: message.ai_mode || "",
+      modelsUsed: Array.isArray(message.models_used) ? message.models_used : [],
     };
   }
   if (message.role === "tool") return {

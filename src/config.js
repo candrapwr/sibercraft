@@ -6,6 +6,9 @@ loadEnvFile(resolve(process.cwd(), ".env"));
 export const config = {
   port: toPositiveInt(process.env.PORT, 3000),
   dataDir: resolve(process.env.DATA_DIR || "data"),
+  webScreenshot: {
+    endpoint: process.env.WEB_SCREENSHOT_API_URL || "https://snap.idsiber.com/api/screenshot",
+  },
   deepseek: {
     apiKey: process.env.PRIMARY_API_KEY || "",
     model: process.env.PRIMARY_MODEL || "deepseek-v4-flash",

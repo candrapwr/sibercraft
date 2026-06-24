@@ -139,6 +139,12 @@ SiberCraft dapat membaca gambar yang dilampirkan pada chat dan menggunakannya se
 
 Gambar yang dikirim disimpan bersama resource sesi agar tetap tersedia saat project dibuka kembali.
 
+### Menggunakan website sebagai referensi
+
+Jika prompt berisi URL website dan meminta tampilan yang mirip atau terinspirasi dari website tersebut, AI dapat menjalankan tool `capture_webpage_screenshot`. Tool ini mengambil PNG melalui `WEB_SCREENSHOT_API_URL`, lalu menyimpannya ke folder `screenshots/` di workspace sesi.
+
+Iterasi pertama menggunakan AI utama untuk memilih dan menjalankan tool. Setelah screenshot tersedia, iterasi berikutnya otomatis menggunakan AI multimodal untuk membaca referensi visual tersebut. UI menampilkan perpindahan model yang terjadi selama turn.
+
 ### Diagram yang terstruktur
 
 Untuk permintaan flowchart, diagram alur, diagram proses, dan bentuk sejenis, AI akan menggunakan format diagram terstruktur. Hasilnya lebih mudah dibaca, disusun ulang, dan diperbarui melalui permintaan lanjutan.
