@@ -422,10 +422,43 @@ Konfigurasi lainnya (model AI, screenshot API, optimasi konteks) dijelaskan di `
 
 ### Membuat akun admin pertama
 
-Karena pendaftaran memerlukan verifikasi email, cara tercepat membuat akun admin pertama adalah:
+Karena pendaftaran memerlukan verifikasi email, cara tercepat membuat akun admin pertama (mis. saat setup production baru) adalah dengan skrip `seed:admin`. Skrip ini membuat/mengubah akun admin langsung di database tanpa perlu email verifikasi:
 
-1. Daftarkan email admin melalui halaman Register (pastikan email tersebut tercantum di `ADMIN_EMAILS`), atau
-2. Buat akun langsung di database melalui skrip Node.js yang memakai `hashPassword` dari `src/password.js`.
+```bash
+# Buat akun admin baru (password diminta interaktif, tersembunyi)
+npm run seed:admin -- admin@idsiber.com
+
+# Reset password akun admin yang sudah ada
+npm run seed:admin -- admin@idsiber.com --reset
+
+# Untuk automasi / non-interaktif (mis. di CI/CD), password via env:
+SEED_PASSWORD=rahasia123 npm run seed:admin -- admin@idsiber.com
+```
+
+Skrip ini akan:
+
+- Membuat akun dengan `role: admin`, `status: active`, password di-hash (scrypt).
+- Bila akun sudah ada tanpa flag `--reset`, diabaikan (anti overwrite tidak sengaja).
+- Memberi saran menambahkan email ke `ADMIN_EMAILS` di `.env` bila belum tercantum.
+
+Pastikan `SESSION_SECRET` sudah diisi di `.env` **sebelum** login, agar sesi tidak hilang saat server di-restart.
+
+Alternatif lain: daftarkan email admin melalui halaman Register (email tersebut harus tercantum di `ADMIN_EMAILS` agar otomatis mendapat peran admin).
+
+### Checklist migrasi ke production
+
+Saat memindahkan SiberCraft dari development ke server production, perhatikan hal berikut:
+
+| Item | Development | Production |
+|------|-------------|------------|
+| `SESSION_SECRET` | auto-generate | **wajib** diisi string acak panjang (kalau tidak, semua user logout tiap restart) |
+| `APP_URL` | `http://localhost:3000` | `https://domain-anda.com` (agar link verifikasi email benar) |
+| `MAIL_*` | SMTP testing | SMTP production yang aktif |
+| `ADMIN_EMAILS` | email dev | email admin production |
+| HTTPS | tidak perlu | **wajib** (agar cookie `Secure` aktif + register/login aman) |
+| Folder `data/` | lokal | harus **writable** oleh proses Node, dan **di-backup** berkala |
+
+Folder `data/` berisi seluruh data pengguna (SQLite) dan project (filesystem) — tidak ikut ter-deploy dari git (ada di `.gitignore`). Di server baru, folder ini terbentuk otomatis saat pertama kali dijalankan, jadi akun perlu dibuat ulang lewat `seed:admin`.
 
 ## Membuka aplikasi
 
