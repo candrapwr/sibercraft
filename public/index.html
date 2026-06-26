@@ -5,9 +5,115 @@
   <meta name="viewport" content="width=1180">
   <meta name="color-scheme" content="dark light">
   <title>SiberCraft — AI Mockup Workspace</title>
-  <link rel="stylesheet" href="/styles.css?n=32">
+  <link rel="stylesheet" href="/styles.css?n=36">
 </head>
 <body>
+  <section id="authView" class="auth-view" hidden>
+    <div class="auth-card">
+      <button id="closeAuthButton" class="auth-close" type="button" aria-label="Close">×</button>
+      <div class="auth-brand">
+        <span class="brand-mark">S</span><span>SiberCraft</span><small>AI workspace</small>
+      </div>
+      <div id="authTabs" class="auth-tabs" role="tablist">
+        <button id="authTabLogin" class="auth-tab active" type="button" role="tab" aria-selected="true">Log in</button>
+        <button id="authTabRegister" class="auth-tab" type="button" role="tab" aria-selected="false">Register</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <div id="loginNotice" class="auth-notice" hidden></div>
+        <label class="field"><span>Email</span>
+          <input id="loginEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        </label>
+        <label class="field"><span>Password</span>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+        </label>
+        <button id="loginSubmit" class="button button-primary button-block" type="submit">Log in <span>→</span></button>
+      </form>
+
+      <form id="registerForm" class="auth-form" hidden>
+        <p class="auth-help">Daftar dengan email Anda. Kami akan mengirim tautan verifikasi untuk menetapkan kata sandi dan mengaktifkan akun.</p>
+        <label class="field"><span>Email</span>
+          <input id="registerEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        </label>
+        <button id="registerSubmit" class="button button-primary button-block" type="submit">Send verification link <span>→</span></button>
+      </form>
+
+      <p id="authError" class="auth-error" role="alert" hidden></p>
+
+      <div id="registerSuccess" class="auth-success" hidden>
+        <div class="auth-success-icon">✓</div>
+        <h3 id="registerSuccessTitle">Check your email</h3>
+        <p id="registerSuccessBody"></p>
+        <button id="registerSuccessButton" class="button button-primary button-block" type="button">Back to log in</button>
+      </div>
+
+      <div class="auth-foot">
+        <button type="button" class="language-option active" data-language-option="en">EN</button>
+        <span class="auth-foot-sep">·</span>
+        <button type="button" class="language-option" data-language-option="id">ID</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="verifyView" class="auth-view" hidden>
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="brand-mark">S</span><span>SiberCraft</span>
+      </div>
+      <h2 id="verifyTitle" class="auth-title">Set your password</h2>
+      <p id="verifyInfo" class="auth-help"></p>
+      <form id="verifyForm" class="auth-form">
+        <label class="field"><span>New password</span>
+          <input id="verifyPassword" name="password" type="password" autocomplete="new-password" placeholder="min. 8 characters" minlength="8" required>
+        </label>
+        <label class="field"><span>Confirm password</span>
+          <input id="verifyPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" placeholder="repeat password" minlength="8" required>
+        </label>
+        <button id="verifySubmit" class="button button-primary button-block" type="submit">Activate account <span>→</span></button>
+      </form>
+      <p id="verifyError" class="auth-error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <section id="adminView" class="admin-view" hidden>
+    <aside class="admin-sidebar">
+      <div class="admin-brand"><span class="brand-mark">S</span><strong>SiberCraft</strong><small>Admin</small></div>
+      <nav class="admin-nav">
+        <button class="admin-nav-item active" type="button" data-admin-nav="users">◈ Users</button>
+      </nav>
+      <button id="adminBackButton" class="admin-nav-item" type="button">← Back to app</button>
+    </aside>
+    <main class="admin-content">
+      <header class="admin-content-header">
+        <div><p class="kicker">MANAGEMENT</p><h2>User management</h2></div>
+        <div id="adminUserCount" class="admin-count"></div>
+      </header>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Email</th><th>Role</th><th>Tier</th><th>Status</th>
+              <th class="num">Projects</th><th>Created</th><th class="num">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminUserTableBody"></tbody>
+        </table>
+      </div>
+      <div id="adminEmpty" class="admin-empty" hidden>No users found.</div>
+    </main>
+  </section>
+
+  <dialog id="adminConfirmDialog" class="admin-confirm-dialog">
+    <div class="dialog-content admin-confirm-content">
+      <h3 id="adminConfirmTitle"></h3>
+      <p id="adminConfirmBody"></p>
+      <div class="dialog-actions">
+        <button id="adminConfirmCancel" class="button button-ghost" type="button">Cancel</button>
+        <button id="adminConfirmOk" class="button button-danger" type="button">Confirm</button>
+      </div>
+    </div>
+  </dialog>
+
   <section id="sessionsView" class="sessions-view">
     <header class="landing-nav">
       <div class="landing-nav-inner">
@@ -18,7 +124,25 @@
             <button type="button" class="language-option" data-language-option="id">ID</button>
           </div>
           <span id="aiStatus" class="status-pill"><i></i><span>Checking AI</span></span>
-          <button id="openCreateButton" class="button button-primary"><span>＋</span>New project</button>
+          <div id="userMenu" class="user-menu" hidden>
+            <button id="userMenuButton" class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+              <span id="userMenuAvatar" class="user-avatar"></span>
+              <span id="userMenuName" class="user-menu-name"></span>
+              <span class="user-menu-badges">
+                <span id="userMenuRole" class="badge badge-role"></span>
+                <span id="userMenuTier" class="badge badge-tier"></span>
+              </span>
+              <i class="user-menu-caret">▾</i>
+            </button>
+            <div id="userMenuDropdown" class="user-menu-dropdown" hidden>
+              <div class="user-menu-email" id="userMenuEmail"></div>
+              <button id="adminPanelButton" class="user-menu-item" type="button" hidden>⚙ Admin panel</button>
+              <button id="logoutButton" class="user-menu-item" type="button">Log out</button>
+            </div>
+          </div>
+          <div id="authActions" class="auth-actions" hidden>
+            <button id="headerLoginButton" class="button button-ghost" type="button">Log in</button>
+          </div>
         </div>
       </div>
     </header>
@@ -76,6 +200,13 @@
           <div><p class="kicker">YOUR PROJECTS</p><h2>Continue your projects</h2><p class="section-copy">All conversations, previews, and resources are stored per project.</p></div>
           <div class="section-actions"><span id="sessionCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
         </div>
+        <div id="guestNotice" class="guest-notice" hidden>
+          <div>
+            <strong id="guestNoticeTitle">Log in to use SiberCraft for free</strong>
+            <p id="guestNoticeBody">Create and edit your own projects, save your work, and export results with the full free experience.</p>
+          </div>
+          <button id="guestNoticeLoginButton" class="button button-primary" type="button">Log in</button>
+        </div>
         <div id="sessionGrid" class="session-grid"></div>
         <div id="emptySessions" class="empty-sessions" hidden>
           <div class="empty-visual"><span>✦</span><i></i><i></i></div>
@@ -115,6 +246,11 @@
         <button id="deleteButton" class="icon-button danger" title="Delete project" aria-label="Delete project">×</button>
       </div>
     </header>
+
+    <div id="readOnlyBanner" class="readonly-banner" hidden>
+      <span>👁</span>
+      <span id="readOnlyBannerText">Read-only — this is a public project. Only the owner can edit it.</span>
+    </div>
 
     <main class="workspace-main">
       <aside class="chat-panel">
@@ -222,6 +358,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/app.js?n=32"></script>
+  <script type="module" src="/app.js?n=33"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 SiberCraft membantu mengubah ide atau gambar referensi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, lalu AI akan membuat dan memperbarui hasilnya di area preview.
 
-Anda tidak harus memahami pemrograman untuk mulai menggunakan SiberCraft.
+Anda tidak harus memahami pemrograman untuk mulai menggunakan SiberCraft, dan **tidak perlu mendaftar** — bisa langsung dipakai sebagai tamu.
 
 ## Apa yang dapat dibuat?
 
@@ -28,6 +28,48 @@ Tampilan SiberCraft terbagi menjadi dua area utama:
 - **Live preview di sebelah kanan** untuk melihat hasil tampilan yang sedang dibuat.
 
 Ketika Anda mengirim permintaan, AI akan membaca kebutuhan, memperbarui resource sesi, dan menampilkan hasilnya pada preview. Untuk proses yang lebih besar, perubahan dapat terlihat secara bertahap melalui **Live Draft Preview** sebelum hasil akhirnya selesai.
+
+## Akun, mode anonim, dan proyek publik
+
+SiberCraft dapat dipakai **tanpa harus mendaftar**. Anda dapat langsung mulai membuat project sebagai tamu (anonim), atau membuat akun untuk menyimpan project secara permanen.
+
+### Mode anonim (tanpa akun)
+
+Saat pertama kali membuka aplikasi tanpa login, Anda otomatis berada dalam **mode anonim**. Anda dapat langsung membuat project dan mengobrol dengan AI.
+
+- Project anonim disimpan di browser ini dan terikat pada identitas anonim Anda.
+- Terdapat batas jumlah project untuk mode anonim (default 3 project, dapat diatur oleh pengelola).
+- Jika batas tercapai, Anda akan diminta login untuk membuat lebih banyak project.
+
+### Mendaftar akun
+
+Untuk membuat akun, tekan tombol **Register** pada bagian atas halaman, lalu:
+
+1. Masukkan alamat email Anda.
+2. SiberCraft mengirim tautan verifikasi ke email tersebut.
+3. Buka tautan di email, masukkan dan konfirmasi kata sandi, lalu akun aktif.
+4. Setelah aktif, masuk dengan email dan kata sandi Anda.
+
+Tautan verifikasi berlaku 24 jam dan hanya dapat digunakan satu kali. Jika tidak menemukan email, periksa folder spam.
+
+Saat Anda login, **project anonim yang telah dibuat akan otomatis dipindahkan ke akun Anda**, sehingga tidak ada pekerjaan yang hilang.
+
+### Peran dan tier
+
+Setiap akun memiliki **peran (role)** dan **tier**:
+
+- **Peran:** `user` (default) atau `admin`. Akun admin dapat mengelola pengguna lewat panel admin. Alamat email yang terdaftar sebagai admin oleh pengelola aplikasi akan otomatis mendapat peran admin saat mendaftar.
+- **Tier:** `free` (default), `tier1`, `tier2`, atau `tier3`. Tier disimpan dan ditampilkan, namun saat ini belum ada pembatasan fitur berdasarkan tier.
+
+### Galeri proyek publik
+
+Project yang dibuat dalam mode anonim bersifat **publik** dan dapat dilihat oleh semua orang di halaman utama, layaknya galeri komunitas.
+
+- Siapa pun dapat **melihat** dan membuka preview project publik.
+- Namun, hanya **pemilik** yang dapat mengedit, mengobrol, atau menghapus project miliknya sendiri.
+- Saat Anda membuka project publik milik orang lain, workspace berubah menjadi **mode read-only** dengan banner kuning sebagai penanda. Tombol chat, hapus, dan edit akan dinonaktifkan.
+
+Pembatasan edit ini memastikan batas project anonim tetap efektif dan mencegah perubahan tanpa izin pada project orang lain.
 
 ## Mulai menggunakan SiberCraft
 
@@ -189,7 +231,19 @@ Sesi dapat dihapus dari kartu pada halaman utama atau dari tombol hapus di dalam
 
 SiberCraft akan meminta konfirmasi terlebih dahulu. Menghapus sesi juga menghapus percakapan, resource, preview, dan seluruh riwayat perubahan sesi tersebut.
 
-### Export hasil
+## Panel admin
+
+Pengguna dengan peran **admin** dapat mengakses panel administrasi melalui menu pengguna (klik avatar di pojok kanan atas, lalu pilih **⚙ Admin panel**). Panel admin juga dapat dibuka melalui tautan `/#admin`.
+
+### Manajemen pengguna
+
+Bagian ini menampilkan seluruh akun terdaftar beserta peran (role), tier, status (pending/aktif), jumlah project, dan tanggal dibuat.
+
+- **Aktifkan manual** — admin dapat mengaktifkan akun pengguna yang masih berstatus pending tanpa perlu menunggu verifikasi email.
+- **Hapus pengguna** — menghapus akun juga **menghapus seluruh project** milik pengguna tersebut secara permanen. Konfirmasi diperlukan sebelum penghapusan dilakukan. Admin tidak dapat menghapus akunnya sendiri.
+- **Ubah peran/tier** — peran dan tier pengguna dapat diubah (misalnya menjadikan pengguna lain sebagai admin atau menaikkan tier).
+
+## Export hasil
 
 Gunakan tombol **Export** pada header workspace untuk mengunduh hasil dalam dua format:
 
@@ -256,6 +310,26 @@ ketika salah satu baris tabel ditekan.
 
 Tidak. Seluruh proses utama dapat dilakukan melalui percakapan. Menu Files tersedia sebagai fitur tambahan bagi pengguna yang ingin memeriksa atau mengedit resource secara manual.
 
+### Apakah harus mendaftar akun?
+
+Tidak. Anda dapat langsung memakai SiberCraft sebagai tamu (anonim). Namun membuat akun membuat project tersimpan permanen, bisa diakses dari perangkat lain, serta menghapus batas jumlah project anonim.
+
+### Apakah project anonim saya aman?
+
+Project anonim bersifat publik dan dapat dilihat orang lain. Namun hanya pemilik yang dapat mengeditnya. Untuk menjaga project tetap pribadi, buat akun — project anonim Anda akan otomatis dipindahkan ke akun saat login pertama.
+
+### Saya tidak menerima email verifikasi. Apa yang harus dilakukan?
+
+Periksa folder spam. Jika tidak ada, coba daftar ulang dengan email yang sama (jika pendaftaran sebelumnya gagal, email dibebaskan untuk dicoba lagi). Pastikan juga pengelola aplikasi telah mengonfigurasi SMTP dengan benar.
+
+### Mengapa saya tidak bisa mengedit sebuah project?
+
+Jika project tersebut dibuat oleh pengguna lain dalam mode anonim (proyek publik), workspace akan masuk mode read-only. Hanya pemilik yang dapat mengedit. Buat project sendiri atau login untuk mengelola project pribadi Anda.
+
+### Bagaimana cara menjadi admin?
+
+Admin ditentukan oleh pengelola aplikasi melalui konfigurasi `ADMIN_EMAILS`. Jika email Anda terdaftar di sana, akun Anda otomatis mendapat peran admin saat mendaftar.
+
 ### Mengapa preview berubah beberapa kali saat AI bekerja?
 
 SiberCraft menampilkan draft secara bertahap. Tampilan sementara mungkin belum lengkap, tetapi akan diganti dengan hasil final ketika proses selesai.
@@ -283,6 +357,75 @@ Undo hanya aktif jika sesi memiliki perubahan sebelumnya yang dapat dikembalikan
 ### Apakah sesi yang sudah dihapus dapat dikembalikan?
 
 Tidak. Penghapusan sesi bersifat permanen, sehingga pastikan sesi memang tidak diperlukan sebelum menyetujui konfirmasi.
+
+## Penyiapan untuk pengelola aplikasi
+
+Bagian ini ditujukan bagi yang menjalankan atau mengonfigurasi SiberCraft di server.
+
+### Persyaratan
+
+- Node.js 22 atau lebih baru (diperlukan untuk dukungan `node:sqlite` bawaan).
+- Tidak ada dependency eksternal — SiberCraft hanya memakai modul bawaan Node.js.
+- Penyedia SMTP untuk pengiriman email verifikasi (mis. Hostinger, Gmail SMTP, dsb).
+
+### Menjalankan
+
+```bash
+npm run dev    # mode pengembangan (auto-reload)
+npm start      # mode produksi
+npm test       # menjalankan test suite
+```
+
+Secara default aplikasi berjalan di `http://localhost:3000`.
+
+### Konfigurasi (file `.env`)
+
+Salin `.env.example` menjadi `.env`, lalu sesuaikan. Bagian yang relevan dengan akun dan autentikasi:
+
+```ini
+# Alamat aplikasi (untuk tautan verifikasi email)
+APP_URL=http://localhost:3000
+
+# Rahasia penandatanganan cookie sesi — WAJIB diisi dengan string acak yang panjang.
+# Jika kosong, secret sementara dibuat otomatis (semua sesi logout saat server restart).
+SESSION_SECRET=
+SESSION_MAX_AGE_DAYS=7
+
+# Daftar email yang otomatis menjadi admin saat mendaftar (pisahkan dengan koma).
+ADMIN_EMAILS=admin@example.com
+
+PASSWORD_MIN_LENGTH=8
+VERIFICATION_TOKEN_HOURS=24
+
+# Mode anonim
+ANON_PROJECT_LIMIT=3
+ANON_MAX_AGE_DAYS=30
+
+# Pengiriman email verifikasi (SMTP)
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.hostinger.com
+MAIL_PORT=587
+MAIL_USERNAME=craft@example.com
+MAIL_PASSWORD=
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=craft@example.com
+MAIL_FROM_NAME="Craft idSiber"
+```
+
+Konfigurasi lainnya (model AI, screenshot API, optimasi konteks) dijelaskan di `.env.example`.
+
+### Penyimpanan data
+
+- **Data pengguna dan token verifikasi** disimpan di **SQLite** (`data/app.db`).
+- **Project/sesi** (percakapan, resource, preview, checkpoint) disimpan sebagai **file** di `data/sessions/`.
+- Seluruh data tersimpan lokal di server tempat SiberCraft dijalankan.
+
+### Membuat akun admin pertama
+
+Karena pendaftaran memerlukan verifikasi email, cara tercepat membuat akun admin pertama adalah:
+
+1. Daftarkan email admin melalui halaman Register (pastikan email tersebut tercantum di `ADMIN_EMAILS`), atau
+2. Buat akun langsung di database melalui skrip Node.js yang memakai `hashPassword` dari `src/password.js`.
 
 ## Membuka aplikasi
 

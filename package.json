@@ -5,11 +5,11 @@
   "type": "module",
   "description": "SiberCraft session-based AI mockup workspace powered by DeepSeek",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "test": "node --test"
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

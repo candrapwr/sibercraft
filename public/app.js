@@ -14,6 +14,19 @@ const translations = {
     viewWorkspace: "View project",
     continueWork: "Continue your projects",
     sectionCopy: "All conversations, previews, and resources are stored per project.",
+    guestMode: "GUEST MODE",
+    guestHeading: "Community projects",
+    guestSectionCopy: "Browse public projects while you are in guest mode.",
+    guestNoticeTitle: "Log in to use SiberCraft for free",
+    guestNoticeBody: "Create and edit your own projects, save your work, and export results with the full free experience.",
+    guestNoticeAction: "Log in free",
+    readOnlyBannerText: "Read-only — this is a public project. Only the owner can edit it.",
+    readOnlyPlaceholder: "This public project is read-only...",
+    adminOnly: "Admin access only",
+    adminUserActivated: "{email} activated successfully",
+    adminUserDeleted: "{email} and their projects deleted",
+    adminDeleteTitle: "Delete {email}?",
+    adminDeleteBody: "This will permanently delete the user and all {count} of their project(s). This cannot be undone.",
     yourWorkspaces: "YOUR WORKSPACES",
     startCreating: "START CREATING",
     sessionCount: "{count} projects",
@@ -100,6 +113,22 @@ const translations = {
     contextOptimized: "Context was compressed by {size} to keep long chats efficient",
     processFailed: "Could not complete the process: {message}",
     requestFailed: "Request failed ({status})",
+    loginRequired: "Please log in to continue",
+    emailRequired: "Email is required",
+    emailPasswordRequired: "Email and password are required",
+    passwordTooShort: "Password must be at least 8 characters",
+    passwordMismatch: "Passwords do not match",
+    sending: "Sending",
+    signingIn: "Signing in",
+    activating: "Activating",
+    registerSent: "Verification link sent. Check your inbox.",
+    registerSuccessBody: "We sent a verification link to {email}. Open it to set your password and activate your account. The link expires in 24 hours and can only be used once. If you don't see it, check your spam folder.",
+    accountActivated: "Account activated. You can now log in.",
+    accountActivatedNotice: "✓ Your account is active. Enter your password to log in.",
+    verifySetTitle: "Set your password",
+    verifySetBody: "Set a password for {email} to activate your account.",
+    verifyInvalidTitle: "Link invalid or expired",
+    verifyInvalidBody: "This verification link is invalid, already used, or expired. Please request a new one.",
     exportHtmlFailed: "HTML export failed",
     exportHtmlSuccess: "Single HTML exported",
     screenshotProcessing: "Screenshot is being processed",
@@ -127,6 +156,19 @@ const translations = {
     viewWorkspace: "Lihat proyek",
     continueWork: "Lanjutkan proyek",
     sectionCopy: "Semua percakapan, preview, dan resource tersimpan sesuai proyeknya.",
+    guestMode: "MODE TAMU",
+    guestHeading: "Proyek komunitas",
+    guestSectionCopy: "Anda sedang melihat proyek publik dalam mode tamu.",
+    guestNoticeTitle: "Login untuk memakai SiberCraft gratis",
+    guestNoticeBody: "Buat dan edit proyek sendiri, simpan pekerjaan, dan export hasil dengan akses penuh tanpa biaya.",
+    guestNoticeAction: "Login gratis",
+    readOnlyBannerText: "Read-only — ini proyek publik. Hanya pemilik yang bisa mengedit.",
+    readOnlyPlaceholder: "Proyek publik ini hanya bisa dilihat...",
+    adminOnly: "Khusus admin",
+    adminUserActivated: "{email} berhasil diaktifkan",
+    adminUserDeleted: "{email} dan semua projectnya dihapus",
+    adminDeleteTitle: "Hapus {email}?",
+    adminDeleteBody: "Tindakan ini akan menghapus user dan semua {count} project-nya secara permanen. Tidak bisa dibatalkan.",
     yourWorkspaces: "WORKSPACE ANDA",
     startCreating: "MULAI MEMBUAT",
     sessionCount: "{count} proyek",
@@ -213,6 +255,22 @@ const translations = {
     contextOptimized: "Konteks diringkas {size} agar chat panjang tetap efisien",
     processFailed: "Tidak dapat menyelesaikan proses: {message}",
     requestFailed: "Request gagal ({status})",
+    loginRequired: "Silakan masuk untuk melanjutkan",
+    emailRequired: "Email wajib diisi",
+    emailPasswordRequired: "Email dan kata sandi wajib diisi",
+    passwordTooShort: "Kata sandi minimal 8 karakter",
+    passwordMismatch: "Kata sandi tidak cocok",
+    sending: "Mengirim",
+    signingIn: "Memproses",
+    activating: "Mengaktifkan",
+    registerSent: "Tautan verifikasi telah dikirim. Periksa kotak masuk Anda.",
+    registerSuccessBody: "Kami mengirim tautan verifikasi ke {email}. Buka tautan tersebut untuk menetapkan kata sandi dan mengaktifkan akun Anda. Tautan berlaku 24 jam dan hanya dapat digunakan satu kali. Jika tidak menemukannya, periksa folder spam.",
+    accountActivated: "Akun berhasil diaktifkan. Silakan masuk.",
+    accountActivatedNotice: "✓ Akun Anda sudah aktif. Masukkan kata sandi untuk masuk.",
+    verifySetTitle: "Tetapkan kata sandi",
+    verifySetBody: "Tetapkan kata sandi untuk {email} untuk mengaktifkan akun Anda.",
+    verifyInvalidTitle: "Tautan tidak valid atau kadaluarsa",
+    verifyInvalidBody: "Tautan verifikasi ini tidak valid, sudah dipakai, atau kadaluarsa. Silakan minta yang baru.",
     exportHtmlFailed: "Export HTML gagal",
     exportHtmlSuccess: "Single HTML berhasil diexport",
     screenshotProcessing: "Screenshot sedang diproses",
@@ -248,6 +306,10 @@ const state = {
   pendingImages: [],
   language: "en",
   workspaceStatusKey: "statusReady",
+  user: null,
+  ownerId: null,
+  readOnly: false,
+  authView: "login",
 };
 
 const ui = {
@@ -261,12 +323,37 @@ const ui = {
   deviceFrame: $("#deviceFrame"), filesDrawer: $("#filesDrawer"), fileList: $("#fileList"),
   workspaceMain: $(".workspace-main"), panelResizeHandle: $("#panelResizeHandle"),
   editorPane: $("#editorPane"), toast: $("#toast"), undoButton: $("#undoButton"),
+  deleteButton: $("#deleteButton"), filesButton: $("#filesButton"),
   exportDialog: $("#exportDialog"), exportButton: $("#exportButton"),
   exportHtmlButton: $("#exportHtmlButton"), exportImageButton: $("#exportImageButton"),
   imageTray: $("#imageTray"), imageButton: $("#imageButton"), imageInput: $("#imageInput"),
   imageLightbox: $("#imageLightbox"), lightboxImage: $("#lightboxImage"),
   lightboxCaption: $("#lightboxCaption"), closeImageLightbox: $("#closeImageLightbox"),
   languageOptions: $$("[data-language-option]"),
+  adminView: $("#adminView"), adminUserTableBody: $("#adminUserTableBody"),
+  adminUserCount: $("#adminUserCount"), adminEmpty: $("#adminEmpty"),
+  adminBackButton: $("#adminBackButton"), adminPanelButton: $("#adminPanelButton"),
+  adminConfirmDialog: $("#adminConfirmDialog"), adminConfirmTitle: $("#adminConfirmTitle"),
+  adminConfirmBody: $("#adminConfirmBody"), adminConfirmOk: $("#adminConfirmOk"),
+  adminConfirmCancel: $("#adminConfirmCancel"),
+  authView: $("#authView"), loginForm: $("#loginForm"), registerForm: $("#registerForm"),
+  authTabLogin: $("#authTabLogin"), authTabRegister: $("#authTabRegister"),
+  authTabs: $("#authTabs"), loginNotice: $("#loginNotice"),
+  loginEmail: $("#loginEmail"), loginPassword: $("#loginPassword"),
+  registerEmail: $("#registerEmail"), authError: $("#authError"),
+  registerSuccess: $("#registerSuccess"), registerSuccessBody: $("#registerSuccessBody"),
+  registerSuccessButton: $("#registerSuccessButton"),
+  verifyView: $("#verifyView"), verifyForm: $("#verifyForm"), verifyPassword: $("#verifyPassword"),
+  verifyPasswordConfirm: $("#verifyPasswordConfirm"), verifyInfo: $("#verifyInfo"),
+  verifyTitle: $("#verifyTitle"), verifyError: $("#verifyError"),
+  userMenu: $("#userMenu"), userMenuButton: $("#userMenuButton"), userMenuDropdown: $("#userMenuDropdown"),
+  userMenuName: $("#userMenuName"), userMenuEmail: $("#userMenuEmail"),
+  userMenuAvatar: $("#userMenuAvatar"), userMenuRole: $("#userMenuRole"),
+  userMenuTier: $("#userMenuTier"), logoutButton: $("#logoutButton"),
+  authActions: $("#authActions"), headerLoginButton: $("#headerLoginButton"),
+  closeAuthButton: $("#closeAuthButton"),
+  guestNotice: $("#guestNotice"), guestNoticeTitle: $("#guestNoticeTitle"),
+  guestNoticeBody: $("#guestNoticeBody"), guestNoticeLoginButton: $("#guestNoticeLoginButton"),
 };
 
 let lightboxTrigger = null;
@@ -322,7 +409,6 @@ function applyLanguage() {
 }
 
 function applyStaticText() {
-  $("#openCreateButton").lastChild.textContent = t("newSession");
   $$("[data-create]").forEach((button) => {
     if (button.closest(".hero-actions")) button.lastChild.textContent = t("startNewSession");
     else if (button.closest(".section-actions")) button.textContent = `＋ ${t("createNew")}`;
@@ -345,6 +431,9 @@ function applyStaticText() {
   $(".section-heading .kicker").textContent = t("yourWorkspaces");
   $(".section-heading h2").textContent = t("continueWork");
   $(".section-copy").textContent = t("sectionCopy");
+  ui.guestNoticeTitle.textContent = t("guestNoticeTitle");
+  ui.guestNoticeBody.textContent = t("guestNoticeBody");
+  ui.guestNoticeLoginButton.textContent = t("guestNoticeAction");
   $(".empty-sessions .kicker").textContent = t("startCreating");
   $(".empty-sessions h3").textContent = state.language === "id" ? "Proyek pertama menunggu ide Anda." : "Your first project is waiting.";
   $(".empty-sessions p:not(.kicker)").textContent = t("firstWorkspaceBody");
@@ -397,13 +486,208 @@ function applyStaticText() {
   $(".header-label", ui.filesDrawer).textContent = t("sessionResource");
   ui.imageLightbox.setAttribute("aria-label", t("imagePreview"));
   ui.closeImageLightbox.setAttribute("aria-label", t("closeImagePreview"));
+  ui.closeAuthButton.setAttribute("aria-label", t("close"));
   renderAiStatus();
+  applySessionHeading();
 }
 
-async function boot() {
-  initializeLanguage();
-  bindEvents();
-  applyLanguage();
+/* ===== Auth ===== */
+function hideAllTopViews() {
+  ui.authView.hidden = true;
+  ui.verifyView.hidden = true;
+  ui.adminView.hidden = true;
+  ui.sessionsView.hidden = true;
+  ui.workspaceView.hidden = true;
+}
+
+function showAuthView(tab = "login") {
+  state.authView = tab === "register" ? "register" : "login";
+  closeOpenDialogs();
+  hideAllTopViews();
+  ui.authView.hidden = false;
+  ui.authError.hidden = true;
+  ui.registerSuccess.hidden = true;
+  ui.loginNotice.hidden = true;
+  const isRegister = state.authView === "register";
+  ui.loginForm.hidden = isRegister;
+  ui.registerForm.hidden = !isRegister;
+  ui.authTabs.hidden = false;
+  ui.authTabLogin.classList.toggle("active", !isRegister);
+  ui.authTabRegister.classList.toggle("active", isRegister);
+  ui.authTabLogin.setAttribute("aria-selected", String(!isRegister));
+  ui.authTabRegister.setAttribute("aria-selected", String(isRegister));
+  document.title = t("appTitle");
+  history.replaceState(null, "", location.pathname);
+  setTimeout(() => (isRegister ? ui.registerEmail : ui.loginEmail).focus(), 50);
+}
+
+function closeOpenDialogs() {
+  for (const dialog of [ui.createDialog, ui.exportDialog]) {
+    if (dialog?.open) dialog.close();
+  }
+}
+
+async function closeAuthView() {
+  ui.authView.hidden = true;
+  await enterApp();
+}
+
+function showRegisterSuccess(email) {
+  setAuthError("");
+  ui.loginForm.hidden = true;
+  ui.registerForm.hidden = true;
+  ui.authTabs.hidden = true;
+  ui.registerSuccessBody.innerHTML = t("registerSuccessBody", { email: `<strong>${escapeHtml(email)}</strong>` });
+  ui.registerSuccess.hidden = false;
+  ui.registerSuccessButton.focus();
+}
+
+function showLoginNotice(message) {
+  ui.loginNotice.innerHTML = message;
+  ui.loginNotice.hidden = !message;
+}
+
+async function showVerifyView(token) {
+  hideAllTopViews();
+  ui.verifyView.hidden = false;
+  ui.verifyError.hidden = true;
+  ui.verifyForm.hidden = false;
+  state.verifyEmail = "";
+  try {
+    const info = await api(`/api/auth/verify-info?token=${encodeURIComponent(token)}`);
+    if (!info.valid) {
+      ui.verifyTitle.textContent = t("verifyInvalidTitle");
+      ui.verifyInfo.textContent = t("verifyInvalidBody");
+      ui.verifyForm.hidden = true;
+      return;
+    }
+    state.verifyEmail = info.email;
+    ui.verifyTitle.textContent = t("verifySetTitle");
+    ui.verifyInfo.textContent = t("verifySetBody", { email: info.email });
+    setTimeout(() => ui.verifyPassword.focus(), 50);
+  } catch (error) {
+    ui.verifyTitle.textContent = t("verifyInvalidTitle");
+    ui.verifyInfo.textContent = error.message;
+    ui.verifyForm.hidden = true;
+  }
+}
+
+function setAuthError(message) {
+  ui.authError.textContent = message;
+  ui.authError.hidden = !message;
+}
+
+let authLoadingTimer = null;
+function setAuthLoading(button, loading, loadingText) {
+  clearTimeout(authLoadingTimer);
+  if (loading) {
+    if (!button.dataset.originalHtml) button.dataset.originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add("is-loading");
+    let dots = 0;
+    const tick = () => {
+      dots = (dots + 1) % 4;
+      button.innerHTML = `${loadingText}${".".repeat(dots)}`;
+      authLoadingTimer = setTimeout(tick, 350);
+    };
+    tick();
+  } else {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+    button.innerHTML = button.dataset.originalHtml || button.innerHTML;
+    delete button.dataset.originalHtml;
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  setAuthError("");
+  const email = ui.registerEmail.value.trim();
+  if (!email) return setAuthError(t("emailRequired"));
+  const submit = $("#registerSubmit");
+  setAuthLoading(submit, true, t("sending"));
+  try {
+    await api("/api/auth/register", { method: "POST", body: { email } });
+    ui.registerForm.reset();
+    notify(t("registerSent"));
+    showRegisterSuccess(email);
+  } catch (error) {
+    setAuthError(error.message);
+  } finally {
+    setAuthLoading(submit, false);
+  }
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  setAuthError("");
+  const email = ui.loginEmail.value.trim();
+  const password = ui.loginPassword.value;
+  if (!email || !password) return setAuthError(t("emailPasswordRequired"));
+  const submit = $("#loginSubmit");
+  setAuthLoading(submit, true, t("signingIn"));
+  try {
+    const user = await api("/api/auth/login", { method: "POST", body: { email, password } });
+    state.ownerId = user.id;
+    applyUser(user);
+    await enterApp();
+  } catch (error) {
+    setAuthError(error.message);
+  } finally {
+    setAuthLoading(submit, false);
+  }
+}
+
+async function handleVerify(event) {
+  event.preventDefault();
+  ui.verifyError.hidden = true;
+  const token = new URLSearchParams(location.search).get("verify");
+  const password = ui.verifyPassword.value;
+  const confirm = ui.verifyPasswordConfirm.value;
+  if (password.length < 8) return showVerifyError(t("passwordTooShort"));
+  if (password !== confirm) return showVerifyError(t("passwordMismatch"));
+  const submit = $("#verifySubmit");
+  setAuthLoading(submit, true, t("activating"));
+  try {
+    await api("/api/auth/set-password", { method: "POST", body: { token, password } });
+    history.replaceState(null, "", location.pathname);
+    showAuthView("login");
+    if (state.verifyEmail) {
+      ui.loginEmail.value = state.verifyEmail;
+      ui.loginPassword.focus();
+      showLoginNotice(t("accountActivatedNotice"));
+    }
+    state.verifyEmail = "";
+    notify(t("accountActivated"));
+  } catch (error) {
+    showVerifyError(error.message);
+  } finally {
+    setAuthLoading(submit, false);
+  }
+}
+
+function showVerifyError(message) {
+  ui.verifyError.textContent = message;
+  ui.verifyError.hidden = false;
+}
+
+async function handleLogout() {
+  toggleUserMenu(false);
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Abaikan; tetap logout di sisi klien.
+  }
+  applyUser(null);
+  location.hash = "";
+  showAuthView("login");
+}
+
+async function enterApp() {
+  hideAllTopViews();
+  ui.sessionsView.hidden = false;
+  applyUser(state.user);
+  applySessionHeading();
   try {
     [state.config, state.sessions] = await Promise.all([api("/api/config"), api("/api/sessions")]);
     renderAiStatus();
@@ -414,11 +698,247 @@ async function boot() {
   }
 }
 
+/** Ubah narasi heading sesuai konteks: login user vs anon. */
+function applySessionHeading() {
+  const kicker = $(".section-heading .kicker");
+  const heading = $(".section-heading h2");
+  const copy = $(".section-copy");
+  if (!kicker || !heading || !copy) return;
+  if (state.user) {
+    kicker.textContent = t("yourWorkspaces");
+    heading.textContent = t("continueWork");
+    copy.textContent = t("sectionCopy");
+    ui.guestNotice.hidden = true;
+  } else {
+    kicker.textContent = t("guestMode");
+    heading.textContent = t("guestHeading");
+    copy.textContent = t("guestSectionCopy");
+    ui.guestNotice.hidden = false;
+  }
+}
+
+function applyUser(user) {
+  state.user = user || null;
+  // Tentukan konteks: apakah kita sedang di app view (sessions/workspace)?
+  const inApp = !ui.sessionsView.hidden || !ui.workspaceView.hidden;
+  if (!user) {
+    ui.userMenu.hidden = true;
+    // Anon di app view tetap bisa buat project + lihat tombol login/register.
+    ui.authActions.hidden = !inApp;
+    return;
+  }
+  ui.userMenu.hidden = false;
+  ui.authActions.hidden = true;
+  // Tombol admin panel hanya untuk role admin.
+  if (ui.adminPanelButton) ui.adminPanelButton.hidden = user.role !== "admin";
+  const initial = (user.email[0] || "?").toUpperCase();
+  ui.userMenuAvatar.textContent = initial;
+  ui.userMenuName.textContent = user.email.split("@")[0];
+  ui.userMenuEmail.textContent = user.email;
+  ui.userMenuRole.textContent = user.role;
+  ui.userMenuRole.className = `badge badge-role ${user.role === "admin" ? "admin" : ""}`;
+  ui.userMenuTier.textContent = user.tier;
+  ui.userMenuTier.className = `badge badge-tier ${user.tier}`;
+}
+
+function toggleUserMenu(open) {
+  if (open === undefined) open = ui.userMenuDropdown.hidden;
+  ui.userMenuDropdown.hidden = !open;
+  ui.userMenuButton.setAttribute("aria-expanded", String(open));
+}
+
+/* ===== Admin panel ===== */
+let adminUsers = [];
+
+async function showAdminView() {
+  if (!state.user || state.user.role !== "admin") {
+    notify(t("adminOnly"), true);
+    location.hash = "";
+    return;
+  }
+  hideAllTopViews();
+  ui.adminView.hidden = false;
+  document.title = "Admin — SiberCraft";
+  toggleUserMenu(false);
+  await loadAdminUsers();
+}
+
+async function loadAdminUsers() {
+  try {
+    adminUsers = await api("/api/admin/users");
+    renderAdminUsers();
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+/** Format tanggal aman untuk admin table (tidak throw bila invalid). */
+function formatAdminDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(state.language === "id" ? "id-ID" : "en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderAdminUsers() {
+  try {
+    ui.adminUserTableBody.replaceChildren();
+    ui.adminUserCount.textContent = `${adminUsers.length} ${adminUsers.length === 1 ? "user" : "users"}`;
+  ui.adminUserCount.textContent = `${adminUsers.length} ${adminUsers.length === 1 ? "user" : "users"}`;
+  ui.adminEmpty.hidden = adminUsers.length > 0;
+  const isSelf = (u) => state.user && u.id === state.user.id;
+  for (const u of adminUsers) {
+    const tr = document.createElement("tr");
+    if (isSelf(u)) tr.classList.add("is-self");
+
+    const emailCell = document.createElement("td");
+    emailCell.innerHTML = `<span class="admin-user-email">${escapeHtml(u.email)}</span>${isSelf(u) ? '<span class="admin-you">you</span>' : ""}`;
+
+    const roleCell = document.createElement("td");
+    roleCell.innerHTML = `<span class="badge badge-role ${u.role === "admin" ? "admin" : ""}">${u.role}</span>`;
+
+    const tierCell = document.createElement("td");
+    tierCell.innerHTML = `<span class="badge badge-tier ${u.tier}">${u.tier}</span>`;
+
+    const statusCell = document.createElement("td");
+    const statusClass = u.status === "active" ? "ok" : "pending";
+    statusCell.innerHTML = `<span class="admin-status admin-status-${statusClass}">●</span>${u.status}`;
+
+    const projCell = document.createElement("td");
+    projCell.className = "num";
+    projCell.textContent = u.projectCount ?? 0;
+
+    const createdCell = document.createElement("td");
+    createdCell.textContent = formatAdminDate(u.createdAt);
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "num";
+    if (!isSelf(u)) {
+      if (u.status !== "active") {
+        const activateBtn = document.createElement("button");
+        activateBtn.className = "admin-action-btn";
+        activateBtn.textContent = "Activate";
+        activateBtn.addEventListener("click", () => adminActivateUser(u));
+        actionsCell.appendChild(activateBtn);
+      }
+      const delBtn = document.createElement("button");
+      delBtn.className = "admin-action-btn danger";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", () => adminConfirmDelete(u));
+      actionsCell.appendChild(delBtn);
+    } else {
+      actionsCell.textContent = "—";
+    }
+
+    tr.append(emailCell, roleCell, tierCell, statusCell, projCell, createdCell, actionsCell);
+    ui.adminUserTableBody.appendChild(tr);
+  }
+  } catch (err) {
+    notify(err.message, true);
+  }
+}
+
+async function adminActivateUser(u) {
+  try {
+    const updated = await api(`/api/admin/users/${u.id}/activate`, { method: "POST" });
+    Object.assign(u, updated);
+    renderAdminUsers();
+    notify(t("adminUserActivated", { email: u.email }));
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+let pendingDeleteUser = null;
+
+function adminConfirmDelete(u) {
+  pendingDeleteUser = u;
+  ui.adminConfirmTitle.textContent = t("adminDeleteTitle", { email: u.email });
+  ui.adminConfirmBody.textContent = t("adminDeleteBody", { count: u.projectCount ?? 0 });
+  ui.adminConfirmDialog.showModal();
+}
+
+async function executeAdminDelete() {
+  const u = pendingDeleteUser;
+  if (!u) return;
+  ui.adminConfirmDialog.close();
+  pendingDeleteUser = null;
+  try {
+    await api(`/api/admin/users/${u.id}`, { method: "DELETE" });
+    adminUsers = adminUsers.filter((x) => x.id !== u.id);
+    renderAdminUsers();
+    notify(t("adminUserDeleted", { email: u.email }));
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+async function boot() {
+  initializeLanguage();
+  bindEvents();
+  applyLanguage();
+  try {
+    const verifyToken = new URLSearchParams(location.search).get("verify");
+    if (verifyToken) {
+      showVerifyView(verifyToken);
+      return;
+    }
+    // Coba ambil user; bila 401/cookie kedaluarsa -> mode anon (tetap pakai app).
+    let user = null;
+    try {
+      const me = await api("/api/auth/me");
+      if (me && me.isAnon) {
+        // Anon: tidak ada akun, tapi punya ownerId untuk identifikasi project.
+        state.ownerId = me.ownerId;
+      } else {
+        user = me;
+        state.ownerId = me ? me.id : null;
+      }
+    } catch {
+      user = null;
+      state.ownerId = null;
+    }
+    applyUser(user);
+    await enterApp();
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
 function bindEvents() {
   ui.languageOptions.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.languageOption));
   });
-  $("#openCreateButton").addEventListener("click", openCreateDialog);
+  ui.authTabLogin.addEventListener("click", () => showAuthView("login"));
+  ui.authTabRegister.addEventListener("click", () => showAuthView("register"));
+  ui.loginForm.addEventListener("submit", handleLogin);
+  ui.registerForm.addEventListener("submit", handleRegister);
+  ui.verifyForm.addEventListener("submit", handleVerify);
+  ui.registerSuccessButton.addEventListener("click", () => showAuthView("login"));
+  ui.userMenuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleUserMenu();
+  });
+  ui.logoutButton.addEventListener("click", handleLogout);
+  ui.adminPanelButton.addEventListener("click", () => { toggleUserMenu(false); location.hash = "admin"; });
+  ui.adminBackButton.addEventListener("click", () => {
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname + location.search);
+      routeFromHash();
+    } else {
+      showSessions();
+    }
+  });
+  ui.adminConfirmOk.addEventListener("click", executeAdminDelete);
+  ui.adminConfirmCancel.addEventListener("click", () => { pendingDeleteUser = null; ui.adminConfirmDialog.close(); });
+  // Tutup dialog via Escape/backdrop bawaan tetap membatalkan.
+  ui.adminConfirmDialog.addEventListener("close", () => { pendingDeleteUser = null; });
+  ui.headerLoginButton.addEventListener("click", () => showAuthView("login"));
+  ui.guestNoticeLoginButton.addEventListener("click", () => showAuthView("login"));
+  ui.closeAuthButton.addEventListener("click", () => closeAuthView().catch((error) => notify(error.message, true)));
+  document.addEventListener("click", (event) => {
+    if (!ui.userMenu.hidden && !ui.userMenu.contains(event.target)) toggleUserMenu(false);
+  });
   $$('[data-create]').forEach((button) => button.addEventListener("click", openCreateDialog));
   $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => ui.createDialog.close()));
   ui.createForm.addEventListener("submit", createSession);
@@ -469,7 +989,8 @@ function bindEvents() {
   window.addEventListener("hashchange", routeFromHash);
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (!ui.imageLightbox.hidden) closeImageLightbox();
+    if (!ui.authView.hidden) closeAuthView().catch((error) => notify(error.message, true));
+    else if (!ui.imageLightbox.hidden) closeImageLightbox();
     else closeFiles();
   });
   window.addEventListener("resize", applyChatPanelWidth);
@@ -481,6 +1002,10 @@ function bindEvents() {
 }
 
 async function routeFromHash() {
+  // Route admin: #admin
+  if (location.hash.replace(/^#/, "") === "admin") {
+    return showAdminView();
+  }
   const id = new URLSearchParams(location.hash.replace(/^#/, "")).get("session");
   if (!id) return showSessions();
   try {
@@ -493,8 +1018,10 @@ async function routeFromHash() {
 
 function showSessions() {
   state.session = null;
-  ui.workspaceView.hidden = true;
+  state.readOnly = false;
+  hideAllTopViews();
   ui.sessionsView.hidden = false;
+  applySessionHeading();
   document.title = t("appTitle");
   api("/api/sessions").then((sessions) => { state.sessions = sessions; renderSessions(); }).catch(() => {});
 }
@@ -506,6 +1033,11 @@ async function openSession(id) {
   ]);
   state.session = session;
   state.pendingImages = [];
+  // Read-only bila user tidak login ATAU bukan pemilik (lihat project publik orang lain).
+  const isOwner = session.ownerId && session.ownerId === state.ownerId;
+  const isAdmin = state.user && state.user.role === "admin";
+  state.readOnly = !isOwner && !isAdmin;
+  applyReadOnlyMode();
   renderImageTray();
   ui.sessionsView.hidden = true;
   ui.workspaceView.hidden = false;
@@ -515,9 +1047,24 @@ async function openSession(id) {
   renderHistory(history);
   renderUsage(session.usage || null);
   setWorkspaceStatus(session.status === "error" ? "error" : "ready", session.status === "error" ? "statusError" : "statusReady");
-  ui.undoButton.disabled = !session.checkpointCount;
+  ui.undoButton.disabled = state.readOnly || !session.checkpointCount;
   autoResizePrompt();
   refreshPreview();
+}
+
+/** Aktifkan/nonaktifkan mode read-only di workspace (project publik orang lain). */
+function applyReadOnlyMode() {
+  const readonly = state.readOnly;
+  for (const key of ["promptInput", "sendButton", "imageButton", "deleteButton", "filesButton", "exportButton"]) {
+    if (ui[key]) ui[key].disabled = readonly;
+  }
+  // Banner read-only (dibuat di index.html).
+  const banner = $("#readOnlyBanner");
+  const bannerText = $("#readOnlyBannerText");
+  if (banner) banner.hidden = !readonly;
+  if (bannerText) bannerText.textContent = t("readOnlyBannerText");
+  ui.workspaceMain?.classList.toggle("readonly-mode", readonly);
+  ui.promptInput.placeholder = t(readonly ? "readOnlyPlaceholder" : "promptPlaceholder");
 }
 
 function renderAiStatus() {
@@ -622,6 +1169,8 @@ async function createSession(event) {
     location.hash = `session=${session.id}`;
   } catch (error) {
     notify(error.message, true);
+    // Bila anon mencapai batas project, arahkan ke login.
+    if (!state.user) showAuthView("login");
   } finally {
     submit.disabled = false;
   }
@@ -1399,6 +1948,11 @@ async function api(path, options = {}) {
     headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
   });
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
+    applyUser(null);
+    showAuthView("login");
+    throw new Error(t("loginRequired"));
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || t("requestFailed", { status: response.status }));
   return data;

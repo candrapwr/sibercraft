@@ -25,7 +25,13 @@ export class SessionStore {
     await mkdir(this.root, { recursive: true });
   }
 
-  async list() {
+  /**
+   * Daftar sesi yang terlihat oleh ownerId:
+   * - Semua sesi publik (anon-* atau orphan/null) — galeri komunal.
+   * - Sesi milik ownerId sendiri.
+   * - isAdmin=true -> semua sesi.
+   */
+  async list(ownerId, { isAdmin = false } = {}) {
     const entries = await readdir(this.root, { withFileTypes: true });
     const sessions = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
       try {
@@ -34,10 +40,76 @@ export class SessionStore {
         return null;
       }
     }));
-    return sessions.filter(Boolean).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return sessions
+      .filter(Boolean)
+      .filter((session) => isAdmin || isPublicOwner(session.ownerId) || session.ownerId === ownerId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async create({ name, template = "blank", model }) {
+  /** Hitung jumlah sesi yang dimiliki ownerId secara eksak (untuk limit create anon). */
+  async countByOwner(ownerId) {
+    if (!ownerId) return 0;
+    const entries = await readdir(this.root, { withFileTypes: true });
+    let count = 0;
+    for (const entry of entries.filter((entry) => entry.isDirectory())) {
+      try {
+        const session = JSON.parse(await readFile(join(this.sessionDir(entry.name), "session.json"), "utf8"));
+        if (session.ownerId === ownerId) count++;
+      } catch {
+        // Lewati sesi rusak.
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Pindahkan semua sesi milik oldOwnerId menjadi milik newOwnerId (claim).
+   * Mengembalikan jumlah sesi yang dipindahkan. Tulis ulang session.json atomik.
+   */
+  async claimSessions(oldOwnerId, newOwnerId) {
+    if (!oldOwnerId || !newOwnerId || oldOwnerId === newOwnerId) return 0;
+    const entries = await readdir(this.root, { withFileTypes: true });
+    let claimed = 0;
+    for (const entry of entries.filter((entry) => entry.isDirectory())) {
+      const sessionPath = join(this.sessionDir(entry.name), "session.json");
+      try {
+        const session = JSON.parse(await readFile(sessionPath, "utf8"));
+        if (session.ownerId === oldOwnerId) {
+          session.ownerId = newOwnerId;
+          session.updatedAt = new Date().toISOString();
+          await atomicJson(sessionPath, session);
+          claimed++;
+        }
+      } catch {
+        // Lewati sesi yang rusak/tidak terbaca.
+      }
+    }
+    return claimed;
+  }
+
+  /**
+   * Hapus SEMUA sesi milik ownerId tertentu dari filesystem. Dipakai saat admin
+   * menghapus user agar project miliknya ikut terhapus. Mengembalikan jumlah terhapus.
+   */
+  async removeByOwner(ownerId) {
+    if (!ownerId) return 0;
+    const entries = await readdir(this.root, { withFileTypes: true });
+    let removed = 0;
+    for (const entry of entries.filter((entry) => entry.isDirectory())) {
+      try {
+        const session = JSON.parse(await readFile(join(this.sessionDir(entry.name), "session.json"), "utf8"));
+        if (session.ownerId === ownerId) {
+          await rm(this.sessionDir(entry.name), { recursive: true, force: true });
+          removed++;
+        }
+      } catch {
+        // Lewati sesi rusak.
+      }
+    }
+    return removed;
+  }
+
+  async create({ name, template = "blank", model, ownerId = null }) {
     const cleanName = String(name || "").trim().slice(0, 80);
     if (!cleanName) throw new HttpError(400, "Nama sesi wajib diisi");
     if (!new Set(["blank", "dashboard"]).has(template)) throw new HttpError(400, "Template tidak valid");
@@ -49,6 +121,7 @@ export class SessionStore {
       name: cleanName,
       template,
       model,
+      ownerId,
       status: "ready",
       usage: {
         last: { promptTokens: 0, completionTokens: 0 },
@@ -72,7 +145,29 @@ export class SessionStore {
     return session;
   }
 
-  async get(id) {
+  /**
+   * Baca sesi untuk INSPEKSI (preview/history/files/export). Publik (anon/orphan)
+   * bisa diakses semua orang; privat hanya pemilik/admin.
+   */
+  async getForView(id, access) {
+    const session = await this.readSession(id);
+    if (this.canView(session, access)) return session;
+    throw new HttpError(404, "Sesi tidak ditemukan");
+  }
+
+  /**
+   * Baca sesi untuk MUTASI (chat/edit/delete/undo). Hanya pemilik/admin.
+   * Sesi publik milik anon lain / orphan -> 403 read-only.
+   */
+  async getForEdit(id, access) {
+    const session = await this.readSession(id);
+    if (this.canEdit(session, access)) return session;
+    // Pesan berbeda: publik tapi read-only vs benar-benar tidak ada.
+    if (this.canView(session, access)) throw new HttpError(403, "Project ini bersifat publik dan hanya bisa diedit pemiliknya");
+    throw new HttpError(404, "Sesi tidak ditemukan");
+  }
+
+  async readSession(id) {
     this.assertId(id);
     try {
       return JSON.parse(await readFile(join(this.sessionDir(id), "session.json"), "utf8"));
@@ -80,6 +175,28 @@ export class SessionStore {
       if (error.code === "ENOENT") throw new HttpError(404, "Sesi tidak ditemukan");
       throw error;
     }
+  }
+
+  /** Boleh melihat: publik, atau milik ownerId, atau admin. */
+  canView(session, access) {
+    if (!session) return false;
+    if (access?.isAdmin) return true;
+    if (isPublicOwner(session.ownerId)) return true;
+    return Boolean(access?.ownerId && session.ownerId === access.ownerId);
+  }
+
+  /** Boleh mengedit: milik ownerId, atau admin. (Sesi anon/orphan hanya pemiliknya.) */
+  canEdit(session, access) {
+    if (!session) return false;
+    if (access?.isAdmin) return true;
+    // Orphan (null) tidak punya pemilik -> tidak bisa diedit siapa pun kecuali admin.
+    if (!session.ownerId) return false;
+    return Boolean(access?.ownerId && session.ownerId === access.ownerId);
+  }
+
+  /** Baca tanpa cek akses (internal use, mis. untuk update/remove/history). */
+  async get(id) {
+    return this.readSession(id);
   }
 
   async update(id, patch) {
@@ -235,6 +352,12 @@ async function walk(dir, onFile) {
     if (entry.isDirectory()) await walk(fullPath, onFile);
     else if (entry.isFile()) await onFile(fullPath, await stat(fullPath));
   }
+}
+
+/** Owner anon (anon-*) atau orphan (null) -> sesi publik (galeri komunal). */
+export function isPublicOwner(ownerId) {
+  if (!ownerId) return true;
+  return String(ownerId).startsWith("anon-");
 }
 
 async function atomicJson(path, value) {
