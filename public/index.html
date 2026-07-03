@@ -356,10 +356,7 @@
     <form id="createForm" method="dialog">
       <div class="dialog-head"><div><p class="kicker">NEW PROJECT</p><h2>Create project</h2></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
       <label class="field"><span>Project name</span><input id="sessionName" name="name" maxlength="80" placeholder="Example: Sales dashboard" autofocus required></label>
-      <fieldset><legend>Start from</legend><div class="template-options">
-        <label><input type="radio" name="template" value="blank" checked><span><i class="blank-template"></i><b>Blank canvas</b><small>Start from an empty page</small></span></label>
-        <label><input type="radio" name="template" value="dashboard"><span><i class="dashboard-template"></i><b>Dashboard</b><small>Basic dashboard structure</small></span></label>
-      </div></fieldset>
+      <input type="hidden" name="template" value="blank">
       <div class="dialog-actions"><button type="button" class="button button-ghost" data-close-dialog>Cancel</button><button type="submit" class="button button-dark">Create project <span>→</span></button></div>
     </form>
   </dialog>

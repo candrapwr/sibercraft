@@ -75,11 +75,8 @@ const translations = {
     createSessionTitle: "Create project",
     sessionName: "Project name",
     sessionNameExample: "Example: Sales dashboard",
-    startFrom: "Start from",
     blankCanvas: "Blank canvas",
-    blankCanvasHelp: "Start from an empty page",
     dashboard: "Dashboard",
-    dashboardHelp: "Basic dashboard structure",
     cancel: "Cancel",
     createSessionAction: "Create project",
     exportResult: "Export result",
@@ -228,11 +225,8 @@ const translations = {
     createSessionTitle: "Buat proyek",
     sessionName: "Nama proyek",
     sessionNameExample: "Contoh: Dashboard penjualan",
-    startFrom: "Mulai dari",
     blankCanvas: "Blank canvas",
-    blankCanvasHelp: "Mulai dari halaman kosong",
     dashboard: "Dashboard",
-    dashboardHelp: "Struktur dashboard dasar",
     cancel: "Batal",
     createSessionAction: "Buat proyek",
     exportResult: "Export hasil",
@@ -503,12 +497,6 @@ function applyStaticText() {
   $(".dialog-head h2", ui.createDialog).textContent = t("createSessionTitle");
   $(".field span", ui.createDialog).textContent = t("sessionName");
   $("#sessionName").placeholder = t("sessionNameExample");
-  $("legend", ui.createDialog).textContent = t("startFrom");
-  const templateLabels = $$(".template-options label > span");
-  $("b", templateLabels[0]).textContent = t("blankCanvas");
-  $("small", templateLabels[0]).textContent = t("blankCanvasHelp");
-  $("b", templateLabels[1]).textContent = t("dashboard");
-  $("small", templateLabels[1]).textContent = t("dashboardHelp");
   const createActions = $$(".dialog-actions button", ui.createDialog);
   createActions[0].textContent = t("cancel");
   createActions[1].childNodes[0].textContent = `${t("createSessionAction")} `;
