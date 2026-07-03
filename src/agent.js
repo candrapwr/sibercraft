@@ -7,7 +7,7 @@ Your job is to create and modify web mockups that run directly in the browser.
 
 Working rules:
 - All deliverables must be static web files inside the workspace: HTML, CSS, JavaScript, SVG, JSON, or related text assets.
-- index.html is the preview entry point. Keep it valid and always previewable.
+- The workspace can hold multiple HTML files. Each preview frame in the canvas displays one HTML file. IMPORTANT: the user only sees files that have a registered frame. Before or alongside writing any HTML file the user should see, ALWAYS call create_frame({ file, device }) so a preview frame exists. If you write_file an HTML file without first registering it with create_frame, the user sees nothing until the very end. For the first action of any build task, call create_frame first, then write_file its content. Reuse an existing frame only when editing an already-shown file. Give each frame a meaningful filename (its title is derived from it). When creating a frame, pick the "device" that best matches the user's intent: "mobile"/"phone"/"app screen" -> mobile, "tablet"/"iPad" -> tablet, otherwise desktop. Default to desktop if unclear.
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
 - When you decide to call tools, always include a short natural-language progress note before or alongside the tool call so the assistant message content is never empty.
@@ -30,7 +30,7 @@ export function isConversationalPrompt(prompt) {
   return /^(halo|hai|hi|hello|hey|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|terima kasih|makasih|thanks|thank you|apa kabar)$/.test(normalized);
 }
 
-export async function runAgent({ session, store, prompt, images = [], config, webScreenshot, signal, emit }) {
+export async function runAgent({ session, store, prompt, images = [], config, webScreenshot, signal, emit, onCreateFrame }) {
   const workspaceDir = store.workspaceDir(session.id);
   const hasImages = images.length > 0;
   const conversational = !hasImages && isConversationalPrompt(prompt);
@@ -39,16 +39,38 @@ export async function runAgent({ session, store, prompt, images = [], config, we
     throw new Error("Model multimodal belum dikonfigurasi");
   }
   let mutated = false;
+  // Track which HTML files already have a frame this turn, so auto-create
+  // fires at most once per file (avoids duplicate frames when AI edits repeatedly).
+  const framedFiles = new Set();
+
   const tools = createFileTools(workspaceDir, async (path) => {
     mutated = true;
     await store.update(session.id, { status: "working" });
     emit({ type: "preview", path });
+    // Safety net: if AI writes/edits an HTML file without first calling
+    // create_frame, auto-register a frame so the user sees live progress
+    // instead of only the final result.
+    if (onCreateFrame && /\.html?$/i.test(path) && !framedFiles.has(path)) {
+      const current = await store.get(session.id);
+      const hasFrame = Array.isArray(current.frames) && current.frames.some((f) => f.file === path);
+      if (!hasFrame) {
+        framedFiles.add(path);
+        const frame = await onCreateFrame({ file: path, device: "desktop" });
+        emit({ type: "frame_created", frame });
+      }
+    }
   }, {
     signal,
     webScreenshot: {
       enabled: Boolean(webScreenshot?.endpoint && multimodalConfigured),
       endpoint: webScreenshot?.endpoint,
     },
+    onCreateFrame: onCreateFrame ? async ({ file, device }) => {
+      framedFiles.add(file); // AI registered it explicitly; don't auto-create later.
+      const frame = await onCreateFrame({ file, device });
+      emit({ type: "frame_created", frame });
+      return frame;
+    } : undefined,
   });
   const previousHistory = await store.history(session.id);
   const history = [...previousHistory];
@@ -222,26 +244,25 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         return { mutated };
       }
 
-      for (const [callIndex, call] of calls.entries()) {
-        const name = call.function?.name || "unknown";
-        emitWriteDraft({
-          index: callIndex,
-          name,
-          arguments: call.function?.arguments || "{}",
-        }, true);
-        if (!announcedToolCalls.has(callIndex)) {
-          emit({ type: "tool_start", callIndex, name });
-        }
-        emit({ type: "tool_args", callIndex, name, arguments: call.function?.arguments || "{}" });
-      }
       await flushStreamFrame(signal);
 
       const capturedImages = [];
+      // Execute tool calls ONE AT A TIME, emitting start/args/result per call so the
+      // user can see which tool is currently processing (instead of all "started" at once).
       for (const [callIndex, call] of calls.entries()) {
         const name = call.function?.name || "unknown";
-        const { result, mutated, artifacts = [] } = await tools.execute(name, call.function?.arguments || "{}");
+        const args = call.function?.arguments || "{}";
+        // Force-flush any pending draft for this tool, then announce it right before execution.
+        emitWriteDraft({ index: callIndex, name, arguments: args }, true);
+        if (!announcedToolCalls.has(callIndex)) {
+          emit({ type: "tool_start", callIndex, name, position: callIndex + 1, total: calls.length });
+        }
+        emit({ type: "tool_args", callIndex, name, arguments: args });
+        await flushStreamFrame(signal);
+
+        const { result, mutated, artifacts = [] } = await tools.execute(name, args);
         if (name === "write_file") {
-          const draft = extractWriteFileDraft(call.function?.arguments || "{}");
+          const draft = extractWriteFileDraft(args);
           if (draft) emit({ type: "preview_draft_clear", path: draft.path });
         }
         const toolMessage = { role: "tool", tool_call_id: call.id, name, content: result };

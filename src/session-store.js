@@ -15,6 +15,7 @@ import { resolveWithin } from "./path-sandbox.js";
 import { initialWorkspace } from "./templates.js";
 
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
+const DEVICE_SIZES = new Set(["desktop", "tablet", "mobile"]);
 
 export class SessionStore {
   constructor(dataDir) {
@@ -123,6 +124,7 @@ export class SessionStore {
       model,
       ownerId,
       status: "ready",
+      frames: [],
       usage: {
         last: { promptTokens: 0, completionTokens: 0 },
         total: { promptTokens: 0, completionTokens: 0 },
@@ -204,6 +206,47 @@ export class SessionStore {
     const next = { ...current, ...patch, id: current.id, updatedAt: new Date().toISOString() };
     await atomicJson(join(this.sessionDir(id), "session.json"), next);
     return next;
+  }
+
+  /**
+   * Tambah frame baru ke sesi. Frame = preview iframe yang pin ke satu file HTML di workspace.
+   * Posisi (x,y) di-auto-assign; client bisa drag & memperbarui via updateFrame.
+   */
+  async addFrame(id, { file, device = "desktop" }) {
+    const current = await this.get(id);
+    const frames = Array.isArray(current.frames) ? [...current.frames] : [];
+    const frame = {
+      id: randomUUID(),
+      file: String(file),
+      device: DEVICE_SIZES.has(device) ? device : "desktop",
+      x: 0,
+      y: 0,
+      createdAt: new Date().toISOString(),
+    };
+    frames.push(frame);
+    await this.update(id, { frames });
+    return frame;
+  }
+
+  /** Perbarui field frame tertentu (x, y, device). */
+  async updateFrame(id, frameId, patch) {
+    const current = await this.get(id);
+    const frames = Array.isArray(current.frames) ? current.frames : [];
+    const idx = frames.findIndex((f) => f.id === frameId);
+    if (idx < 0) throw new HttpError(404, "Frame tidak ditemukan");
+    const next = { ...frames[idx], ...patch };
+    if (next.device && !DEVICE_SIZES.has(next.device)) next.device = "desktop";
+    frames[idx] = next;
+    await this.update(id, { frames });
+    return next;
+  }
+
+  /** Hapus frame dari sesi (tidak menghapus file di workspace). */
+  async removeFrame(id, frameId) {
+    const current = await this.get(id);
+    const frames = Array.isArray(current.frames) ? current.frames.filter((f) => f.id !== frameId) : [];
+    await this.update(id, { frames });
+    return frames;
   }
 
   async remove(id) {

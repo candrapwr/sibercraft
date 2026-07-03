@@ -1,3 +1,4 @@
+import { canvasView, onFrameCreated, onPreviewUpdate, onDraftUpdate, onDraftClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js?v=37";
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const MAX_IMAGE_BYTES = 1_000_000;
@@ -59,6 +60,16 @@ const translations = {
     mobile: "Mobile",
     refreshPreview: "Refresh preview",
     openInNewTab: "Open in new tab",
+    openCanvas: "Open canvas workspace",
+    canvas: "Canvas",
+    backToProject: "Back to project",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    fitAllFrames: "Fit all frames",
+    collapseChat: "Collapse chat",
+    expandChat: "Expand chat",
+    canvasEmptyTitle: "Canvas is empty",
+    canvasEmptyBody: "Chat with AI to create the first frame.",
     loadingPreview: "Loading preview",
     selectFileSource: "Select a file to inspect the source",
     createSessionTitle: "Create project",
@@ -143,6 +154,7 @@ const translations = {
     toolEditFile: "Editing file",
     toolCopyFile: "Copying file",
     toolCaptureWebpage: "Capturing website screenshot",
+    toolCreateFrame: "Creating frame",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 projects",
   },
@@ -201,6 +213,16 @@ const translations = {
     mobile: "Mobile",
     refreshPreview: "Refresh preview",
     openInNewTab: "Buka di tab baru",
+    openCanvas: "Buka workspace canvas",
+    canvas: "Canvas",
+    backToProject: "Kembali ke proyek",
+    zoomIn: "Perbesar",
+    zoomOut: "Perkecil",
+    fitAllFrames: "Pas semua frame",
+    collapseChat: "Lipat chat",
+    expandChat: "Buka chat",
+    canvasEmptyTitle: "Canvas kosong",
+    canvasEmptyBody: "Chat dengan AI untuk membuat frame pertama.",
     loadingPreview: "Memuat preview",
     selectFileSource: "Pilih file untuk melihat source",
     createSessionTitle: "Buat proyek",
@@ -285,6 +307,7 @@ const translations = {
     toolEditFile: "Editing file",
     toolCopyFile: "Copying file",
     toolCaptureWebpage: "Mengambil screenshot website",
+    toolCreateFrame: "Membuat frame",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 proyek",
   },
@@ -354,6 +377,7 @@ const ui = {
   closeAuthButton: $("#closeAuthButton"),
   guestNotice: $("#guestNotice"), guestNoticeTitle: $("#guestNoticeTitle"),
   guestNoticeBody: $("#guestNoticeBody"), guestNoticeLoginButton: $("#guestNoticeLoginButton"),
+  previewStage: $("#previewStage"), openCanvasButton: $("#openCanvasButton"),
 };
 
 let lightboxTrigger = null;
@@ -454,13 +478,25 @@ function applyStaticText() {
   $("#sendButton").setAttribute("aria-label", t("sendPrompt"));
   $("#panelResizeHandle").setAttribute("aria-label", t("resizeChatPanel"));
   $(".viewport-tabs").setAttribute("aria-label", t("previewSize"));
-  const [desktop, tablet, mobile] = $$("[data-viewport]");
+  const [desktop, tablet, mobile] = $$("[data-viewport]", $(".viewport-tabs"));
   desktop.title = desktop.setAttribute("aria-label", t("desktop")) || t("desktop");
   tablet.title = tablet.setAttribute("aria-label", t("tablet")) || t("tablet");
   mobile.title = mobile.setAttribute("aria-label", t("mobile")) || t("mobile");
   $("span", desktop).textContent = t("desktop");
   $("#refreshButton").title = t("refreshPreview");
   $("#openPreviewButton").title = t("openInNewTab");
+  // Canvas view static text.
+  const cvBack = $("#cvBackButton");
+  if (cvBack) { cvBack.title = t("backToProject"); cvBack.setAttribute("aria-label", t("backToProject")); }
+  for (const id of ["cvZoomIn", "cvCtrlZoomIn"]) { const el = $("#" + id); if (el) { el.title = t("zoomIn"); el.setAttribute("aria-label", t("zoomIn")); } }
+  for (const id of ["cvZoomOut", "cvCtrlZoomOut"]) { const el = $("#" + id); if (el) { el.title = t("zoomOut"); el.setAttribute("aria-label", t("zoomOut")); } }
+  for (const id of ["cvZoomFit", "cvCtrlZoomFit"]) { const el = $("#" + id); if (el) { el.title = t("fitAllFrames"); el.setAttribute("aria-label", t("fitAllFrames")); } }
+  const dockToggle = $("#chatDockToggle");
+  if (dockToggle) { dockToggle.title = t("collapseChat"); dockToggle.setAttribute("aria-label", t("collapseChat")); }
+  const emptyTitle = $(".canvas-empty-hint b");
+  const emptyBody = $(".canvas-empty-hint span");
+  if (emptyTitle) emptyTitle.textContent = t("canvasEmptyTitle");
+  if (emptyBody) emptyBody.textContent = t("canvasEmptyBody");
   $("#previewLoading p").textContent = t("loadingPreview");
   $(".editor-empty p").textContent = t("selectFileSource");
   $(".kicker", ui.createDialog).textContent = t("newWorkspace");
@@ -987,6 +1023,14 @@ function bindEvents() {
   ui.panelResizeHandle.addEventListener("keydown", resizePanelWithKeyboard);
   ui.previewFrame.addEventListener("load", () => { ui.previewLoading.hidden = true; });
   window.addEventListener("hashchange", routeFromHash);
+  // Saat user klik back dari canvas view → kembali ke daftar project & clear state.
+  // Clear hash dulu supaya refresh tidak kembali ke session yang sudah ditinggalkan.
+  window.addEventListener("sibercraft:canvas-left", () => {
+    if (location.hash && location.hash.replace(/^#/, "").includes("session=")) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+    showSessions();
+  });
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (!ui.authView.hidden) closeAuthView().catch((error) => notify(error.message, true));
@@ -996,6 +1040,7 @@ function bindEvents() {
   window.addEventListener("resize", applyChatPanelWidth);
   window.addEventListener("pointermove", resizePanel);
   window.addEventListener("pointerup", endPanelResize);
+  canvasView.init();
   $("#previewStage").addEventListener("click", (event) => {
     if (window.innerWidth <= 680 && event.target === $("#previewStage")) ui.workspaceView.classList.remove("preview-mobile");
   });
@@ -1040,7 +1085,7 @@ async function openSession(id) {
   applyReadOnlyMode();
   renderImageTray();
   ui.sessionsView.hidden = true;
-  ui.workspaceView.hidden = false;
+  ui.workspaceView.hidden = false; // chat-panel masih mount di sini, lalu dipindah ke canvas dock
   applyChatPanelWidth();
   ui.workspaceName.textContent = session.name;
   document.title = t("workspaceTitle", { name: session.name });
@@ -1049,7 +1094,48 @@ async function openSession(id) {
   setWorkspaceStatus(session.status === "error" ? "error" : "ready", session.status === "error" ? "statusError" : "statusReady");
   ui.undoButton.disabled = state.readOnly || !session.checkpointCount;
   autoResizePrompt();
-  refreshPreview();
+  // Langsung masuk canvas view (workspace view centered lama sudah tidak dipakai).
+  enterCanvasForSession(session);
+}
+
+/** Masuk canvas view untuk session, auto-migrasi project lama tanpa frames. */
+async function enterCanvasForSession(session) {
+  const hasFrames = Array.isArray(session.frames) && session.frames.length > 0;
+  // Hanya migrasi/bootstrap untuk project LAMA yang sudah punya history
+  // (checkpointCount > 0). Project baru (kosong) biarkan kosong sampai AI bikin frame.
+  const isLegacy = !hasFrames && (session.checkpointCount || 0) > 0;
+
+  if (isLegacy && state.readOnly) {
+    // Read-only (project publik orang lain): tidak boleh tulis ke server.
+    // Auto-scan file .html di workspace → buat frame ephemeral di client saja.
+    canvasView.enter({
+      session,
+      chatMount: $(".chat-panel"),
+      chatResizeHandle: ui.panelResizeHandle,
+    });
+    await canvasView.bootstrapFromFiles(session.id);
+  } else if (isLegacy) {
+    // Owner + legacy: persist migration ke server (tahan lintas perangkat).
+    try {
+      const updated = await api(`/api/sessions/${session.id}/migrate-frames`, { method: "POST" });
+      if (updated?.frames) session.frames = updated.frames;
+    } catch (e) {
+      // gagal migrate → fallback scan file di client di bawah
+    }
+    canvasView.enter({
+      session,
+      chatMount: $(".chat-panel"),
+      chatResizeHandle: ui.panelResizeHandle,
+    });
+    if (!session.frames?.length) await canvasView.bootstrapFromFiles(session.id);
+  } else {
+    // Project baru (kosong) ATAU sudah punya frames → langsung masuk canvas apa adanya.
+    canvasView.enter({
+      session,
+      chatMount: $(".chat-panel"),
+      chatResizeHandle: ui.panelResizeHandle,
+    });
+  }
 }
 
 /** Aktifkan/nonaktifkan mode read-only di workspace (project publik orang lain). */
@@ -1079,14 +1165,18 @@ function renderAiStatus() {
 }
 
 function renderUsage(usage) {
-  if (!usage?.last) {
-    ui.usageBadge.hidden = true;
-    return;
+  const badges = [
+    { badge: ui.usageBadge, prompt: ui.usagePrompt, completion: ui.usageCompletion },
+    { badge: $("#cvUsageBadge"), prompt: $("#cvUsagePrompt"), completion: $("#cvUsageCompletion") },
+  ];
+  for (const b of badges) {
+    if (!b.badge) continue;
+    if (!usage?.last) { b.badge.hidden = true; continue; }
+    b.badge.hidden = false;
+    if (b.prompt) b.prompt.textContent = formatCompactTokens(usage.last.promptTokens || 0);
+    if (b.completion) b.completion.textContent = formatCompactTokens(usage.last.completionTokens || 0);
+    b.badge.title = `Turn total - prompt: ${(usage.last.promptTokens || 0).toLocaleString()} - completion: ${(usage.last.completionTokens || 0).toLocaleString()}`;
   }
-  ui.usageBadge.hidden = false;
-  ui.usagePrompt.textContent = formatCompactTokens(usage.last.promptTokens || 0);
-  ui.usageCompletion.textContent = formatCompactTokens(usage.last.completionTokens || 0);
-  ui.usageBadge.title = `Turn total - prompt: ${(usage.last.promptTokens || 0).toLocaleString()} - completion: ${(usage.last.completionTokens || 0).toLocaleString()}`;
 }
 
 function resetTurnUsageDisplay() {
@@ -1110,15 +1200,14 @@ function renderSessions() {
     card.tabIndex = 0;
     const preview = document.createElement("div");
     preview.className = "session-preview";
-    const frame = document.createElement("iframe");
-    frame.src = `/preview/${session.id}/?card=1`;
-    frame.loading = "lazy";
-    frame.setAttribute("sandbox", "");
-    frame.title = t("previewCard", { name: session.name });
+    const frameCount = Array.isArray(session.frames) ? session.frames.length : 0;
+    const previewIcon = document.createElement("div");
+    previewIcon.className = "session-preview-icon";
+    previewIcon.innerHTML = `<span class="preview-grid"></span><b>${frameCount}</b><small>${frameCount === 1 ? "frame" : "frames"}</small>`;
     const previewBadge = document.createElement("span");
     previewBadge.className = "session-preview-badge";
     previewBadge.textContent = session.template === "dashboard" ? t("dashboard") : t("blankCanvas");
-    preview.append(frame, previewBadge);
+    preview.append(previewIcon, previewBadge);
     const meta = document.createElement("div");
     meta.className = "session-meta";
     const copy = document.createElement("div");
@@ -1591,6 +1680,7 @@ async function sendPrompt(event) {
       if (eventData.type === "assistant_start") {
         ensureAssistantTurn();
         sawAssistantOutput = true;
+        onTurnStart();
       } else if (eventData.type === "content") {
         sawAssistantOutput = true;
         bufferedDelta += eventData.delta;
@@ -1606,7 +1696,11 @@ async function sendPrompt(event) {
         flushBufferedContent();
         sawAssistantOutput = true;
         appendStreamingTool(eventData.name, eventData.callIndex);
-        setWorkspaceStatus("working", toolLabel(eventData.name));
+        // Show "processing X of N" when multiple tools run in one turn.
+        const pos = eventData.position && eventData.total
+          ? `${eventData.position}/${eventData.total}`
+          : null;
+        setWorkspaceStatus("working", toolLabel(eventData.name) + (pos ? ` (${pos})` : ""));
       } else if (eventData.type === "tool_args") {
         flushBufferedContent();
         const tool = state.activeToolBlocks.get(eventData.callIndex);
@@ -1634,11 +1728,16 @@ async function sendPrompt(event) {
         appendTurnModels(ensureAssistantTurn(), eventData.models || []);
       } else if (eventData.type === "preview") {
         schedulePreview();
+        onPreviewUpdate(eventData.path);
       } else if (eventData.type === "preview_draft") {
         scheduleDraftPreview();
+        onDraftUpdate(eventData.path);
         setWorkspaceStatus("working", "statusLiveDraft");
       } else if (eventData.type === "preview_draft_clear") {
         schedulePreview();
+        onDraftClear(eventData.path);
+      } else if (eventData.type === "frame_created") {
+        onFrameCreated(eventData.frame);
       } else if (eventData.type === "done") {
         flushBufferedContent();
         if (!sawAssistantOutput && eventData.message) {
@@ -1646,6 +1745,7 @@ async function sendPrompt(event) {
           appendTextBlock(turn, eventData.message);
           finalizeAssistantTurn(turn);
         }
+        onTurnDone();
       } else if (eventData.type === "error") {
         throw new Error(eventData.message);
       }
@@ -1655,6 +1755,7 @@ async function sendPrompt(event) {
     setWorkspaceStatus("ready", "statusReady");
     state.session.checkpointCount = (state.session.checkpointCount || 0) + 1;
     ui.undoButton.disabled = false;
+    syncUndoState(state.session.checkpointCount);
     refreshPreview();
   } catch (error) {
     flushBufferedContent();
@@ -1828,8 +1929,9 @@ function previewUrl() {
 }
 
 function setViewport(button) {
+  const device = button.dataset.viewport;
   $$('[data-viewport]').forEach((item) => item.classList.toggle("active", item === button));
-  ui.deviceFrame.className = `device-frame ${button.dataset.viewport}`;
+  ui.deviceFrame.className = `device-frame ${device}`;
 }
 
 async function openFiles() {
@@ -1971,7 +2073,7 @@ function scrollChat(immediate = false) {
   if (immediate) update();
   else requestAnimationFrame(update);
 }
-function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile"), capture_webpage_screenshot: t("toolCaptureWebpage") })[name] || name; }
+function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile"), capture_webpage_screenshot: t("toolCaptureWebpage"), create_frame: t("toolCreateFrame") })[name] || name; }
 function formatDate(value) { return new Intl.DateTimeFormat(state.language === "id" ? "id-ID" : "en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
 function formatBytes(bytes) { return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`; }
 function formatCompactTokens(value) {

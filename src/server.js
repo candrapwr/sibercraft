@@ -185,7 +185,8 @@ async function handleApi(request, response, url, user) {
   if (method === "GET" && action === "export/html") {
     if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
     const session = await store.getForView(id, access);
-    const html = await buildStandaloneHtml(store.workspaceDir(id));
+    const entryFile = normalizeDraftPath(url.searchParams.get("file") || "") || "index.html";
+    const html = await buildStandaloneHtml(store.workspaceDir(id), entryFile);
     const filename = `${safeFilename(session.name)}.html`;
     response.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
@@ -199,7 +200,8 @@ async function handleApi(request, response, url, user) {
     if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
     const session = await store.getForView(id, access);
     const width = Math.min(2560, Math.max(320, Number.parseInt(url.searchParams.get("width") || "1440", 10) || 1440));
-    const previewUrl = `http://127.0.0.1:${config.port}/preview/${id}/?export=${Date.now()}`;
+    const fileRaw = normalizeDraftPath(url.searchParams.get("file") || "") || "index.html";
+    const previewUrl = `http://127.0.0.1:${config.port}/preview/${id}/${encodeURIComponent(fileRaw)}?export=${Date.now()}`;
     let image;
     try {
       image = await captureFullPage({ url: previewUrl, width });
@@ -240,6 +242,36 @@ async function handleApi(request, response, url, user) {
     const controller = activeRuns.get(id);
     if (controller) controller.abort();
     return sendJson(response, 200, { stopped: Boolean(controller) });
+  }
+  // Update frame position/device (drag persistence). action = "frame/:frameId"
+  if (method === "PATCH" && action.startsWith("frame/")) {
+    await store.getForEdit(id, access);
+    const frameId = action.slice("frame/".length);
+    const body = await readJson(request);
+    const patch = {};
+    if (typeof body.x === "number") patch.x = Math.round(body.x);
+    if (typeof body.y === "number") patch.y = Math.round(body.y);
+    if (typeof body.device === "string") patch.device = body.device;
+    const frame = await store.updateFrame(id, frameId, patch);
+    return sendJson(response, 200, frame);
+  }
+  if (method === "DELETE" && action.startsWith("frame/")) {
+    await store.getForEdit(id, access);
+    const frameId = action.slice("frame/".length);
+    const frames = await store.removeFrame(id, frameId);
+    return sendJson(response, 200, { frames });
+  }
+  // Migrate legacy sessions (no frames field) → create 1 frame for index.html
+  // so old content stays visible in the canvas view.
+  if (method === "POST" && action === "migrate-frames") {
+    await store.getForEdit(id, access);
+    const session = await store.get(id);
+    if (Array.isArray(session.frames) && session.frames.length > 0) {
+      return sendJson(response, 200, { frames: session.frames });
+    }
+    await store.addFrame(id, { file: "index.html", device: "desktop" });
+    const updated = await store.get(id);
+    return sendJson(response, 200, { frames: updated.frames });
   }
   if (method === "POST" && action === "chat") {
     return streamChat(request, response, id, access);
@@ -459,6 +491,7 @@ async function streamChat(request, response, id, access) {
       webScreenshot: config.webScreenshot,
       signal: controller.signal,
       emit,
+      onCreateFrame: async ({ file, device }) => store.addFrame(id, { file, device }),
     });
     if (checkpoint && !result?.mutated) await store.discardCheckpoint(id, checkpoint);
   } catch (error) {

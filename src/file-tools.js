@@ -95,6 +95,37 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       await onMutation(destination);
       return `Berhasil menyalin ${source} ke ${destination}`;
     }, true),
+    ...(options.onCreateFrame ? [
+      tool(
+        "create_frame",
+        "Register a new preview frame in the canvas. A frame displays one HTML file from the workspace as a live preview the user can see. Call this once per distinct page/surface you create, then write that file's content with write_file. The `file` must end in .html or .htm. Use a meaningful filename since the frame title is derived from it (e.g. dashboard.html -> 'dashboard').",
+        {
+          type: "object",
+          properties: {
+            file: {
+              type: "string",
+              description: "Relative path of the HTML file this frame previews (e.g. index.html, dashboard.html)",
+            },
+            device: {
+              type: "string",
+              enum: ["desktop", "tablet", "mobile"],
+              description: "Initial device size for the frame. Defaults to desktop.",
+            },
+          },
+          required: ["file"],
+          additionalProperties: false,
+        },
+        async ({ file, device }) => {
+          const cleanFile = String(file || "").replace(/\\/g, "/").replace(/^\.\//, "");
+          if (!/\.html?$/i.test(cleanFile)) {
+            return { result: `Error: file harus berakhiran .html atau .htm (diterima: ${file})` };
+          }
+          const frame = await options.onCreateFrame({ file: cleanFile, device });
+          return { result: `Frame dibuat untuk ${cleanFile} (device: ${frame.device}). Sekarang tulis isi file tersebut dengan write_file.`, frame };
+        },
+        true,
+      ),
+    ] : []),
     ...(options.webScreenshot?.enabled ? [
       tool(
         "capture_webpage_screenshot",
@@ -144,6 +175,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
             result: String(output.result || "").slice(0, 400_000),
             mutated: selected.mutates,
             artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
+            ...(output.frame ? { frame: output.frame } : {}),
           };
         }
         return { result: String(output).slice(0, 400_000), mutated: selected.mutates, artifacts: [] };

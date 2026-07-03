@@ -91,8 +91,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .session-card:hover,.session-card:focus-visible { transform: translateY(-3px); border-color: rgba(105,207,151,.25); background: rgba(255,255,255,.028); box-shadow: 0 20px 46px rgba(0,0,0,.26); }
 .session-delete { position: absolute; z-index: 3; top: 9px; right: 9px; width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; color: #aab8b0; background: rgba(9,14,12,.76); opacity: 0; cursor: pointer; font-size: 17px; line-height: 1; backdrop-filter: blur(8px); transition: opacity .15s, color .15s, background .15s; }
 .session-card:hover .session-delete,.session-delete:focus-visible { opacity: 1; }.session-delete:hover { color: #ffb2a9; background: rgba(103,37,33,.85); }.session-delete:focus-visible { outline: 2px solid rgba(122,212,159,.5); outline-offset: 2px; }.session-delete:disabled { opacity: .45; cursor: wait; }
-.session-preview { position: relative; height: 188px; overflow: hidden; border-bottom: 1px solid rgba(208,220,212,.08); background: #131b17; pointer-events: none; }
-.session-preview iframe { width: 1440px; height: 900px; border: 0; transform: scale(.27); transform-origin: 0 0; background: white; }
+.session-preview { position: relative; height: 188px; overflow: hidden; border-bottom: 1px solid rgba(208,220,212,.08); background: radial-gradient(rgba(133,151,141,.18) 0.7px, transparent 0.7px) 0 0/14px 14px, #131b17; display: grid; place-items: center; }
+.session-preview-icon { display: grid; justify-items: center; gap: 6px; color: #5d6e64; }
+.session-preview-icon b { font-size: 30px; color: #8a9c91; font-weight: 650; }
+.session-preview-icon small { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.session-preview-icon .preview-grid { width: 54px; height: 38px; border: 1.5px solid rgba(133,151,141,.4); border-radius: 5px; background: linear-gradient(135deg, rgba(76,179,127,.12), transparent 60%); position: relative; }
+.session-preview-icon .preview-grid::before { content: ""; position: absolute; inset: 4px; border: 1px dashed rgba(133,151,141,.3); border-radius: 2px; }
 .session-preview::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 65%, rgba(8,13,11,.15)); box-shadow: inset 0 0 40px rgba(0,0,0,.08); }
 .session-preview-badge { position: absolute; z-index: 2; top: 9px; left: 9px; padding: 5px 7px; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; color: #b2c1b8; background: rgba(9,14,12,.72); backdrop-filter: blur(8px); font-size: 7px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .session-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 15px; }
@@ -236,6 +240,63 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .image-lightbox-content img { display: block; max-width: min(92vw, 1500px); max-height: calc(100dvh - 105px); border: 1px solid rgba(208,220,212,.16); border-radius: 10px; object-fit: contain; box-shadow: 0 24px 80px rgba(0,0,0,.55); }
 .image-lightbox-content figcaption { max-width: min(80vw, 700px); overflow: hidden; color: #aabbb1; font-size: 11px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .image-lightbox-close { position: absolute; top: 16px; right: 18px; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(208,220,212,.18); border-radius: 50%; color: #edf5ef; background: rgba(255,255,255,.07); cursor: pointer; font-size: 24px; line-height: 1; }.image-lightbox-close:hover { background: rgba(255,255,255,.13); }.image-lightbox-close:focus-visible { outline: 2px solid rgba(122,212,159,.65); outline-offset: 2px; }
+
+/* ===== Canvas workspace (full canvas view — multi-frame, pan/zoom/drag) ===== */
+/* Canvas view (top-level, separate from centered workspace view) */
+.canvas-view { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-rows: auto 1fr; background: var(--paper); }
+.canvas-view-header { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 56px; border-bottom: 1px solid var(--line); background: rgba(9,14,12,.86); backdrop-filter: blur(14px); }
+.canvas-view-header .cv-title { font-weight: 650; font-size: 14px; }
+.canvas-view-header .cv-spacer { flex: 1; }
+.canvas-view-header button { height: 32px; padding: 0 12px; border-radius: 8px; color: #b6c4ba; background: rgba(255,255,255,.05); cursor: pointer; font-size: 12px; }.canvas-view-header button:hover { background: rgba(255,255,255,.1); color: #f4fbf6; }
+.canvas-layout { position: relative; display: grid; grid-template-columns: var(--chat-dock-w, 280px) 1fr; min-height: 0; transition: grid-template-columns .22s ease; }
+.canvas-layout.dock-collapsed { grid-template-columns: 0px 1fr; }
+/* Chat dock — hosts the moved .chat-panel node */
+.chat-dock { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--line); background: var(--white); display: flex; flex-direction: column; }
+/* Toggle lives in #canvasLayout (outside the dock) so it stays visible when collapsed.
+   Positioned at the left edge of the canvas area, vertically centered. */
+.chat-dock-toggle { position: absolute; top: 50%; left: var(--chat-dock-w, 280px); margin-left: -13px; transform: translateY(-50%); z-index: 35; width: 26px; height: 50px; display: grid; place-items: center; border: 1px solid var(--line); border-left: 0; border-radius: 0 9px 9px 0; background: var(--white); color: #8ea197; cursor: pointer; font-size: 13px; transition: left .22s ease; }.chat-dock-toggle:hover { color: #f4fbf6; background: rgba(255,255,255,.06); }
+.canvas-layout.dock-collapsed .chat-dock-toggle { left: 0; margin-left: 0; border-left: 1px solid var(--line); border-radius: 9px 0 0 9px; }
+.chat-dock .chat-panel { width: 100%; height: 100%; border: 0; display: flex; flex-direction: column; }
+.chat-dock .chat-panel .chat-scroll-region { flex: 1; min-height: 0; }
+/* Canvas area */
+.canvas-area { position: relative; min-width: 0; min-height: 0; overflow: hidden; cursor: grab; overscroll-behavior: none; touch-action: none; background-color: #101715; background-image: radial-gradient(rgba(133, 151, 141, .26) 0.7px, transparent 0.7px); background-size: 16px 16px; }.canvas-area.grabbing { cursor: grabbing; }
+.canvas-viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; }.canvas-viewport > * { pointer-events: auto; }
+.canvas-frame { position: absolute; overflow: visible; cursor: grab; background: transparent; outline: 1px solid rgba(208,220,212,.35); outline-offset: 0; box-shadow: 0 14px 40px rgba(0,0,0,.35); transition: width .2s, height .2s, border-radius .2s, box-shadow .15s, outline-color .15s; }.canvas-frame.tablet { border-radius: 12px; }.canvas-frame.mobile { border-radius: 18px; }.canvas-frame.grabbing { cursor: grabbing; }.canvas-frame.selected { outline-color: rgba(76,179,127,.7); outline-width: 2px; box-shadow: 0 0 0 4px rgba(76,179,127,.18), 0 14px 40px rgba(0,0,0,.35); }.canvas-frame.drafting { outline-color: rgba(237,123,75,.7); outline-width: 2px; box-shadow: 0 0 0 4px rgba(237,123,75,.15), 0 14px 40px rgba(0,0,0,.35); }.canvas-frame.drafting .frame-label { background: rgba(94,50,30,.92); color: #f6c9b8; }.canvas-frame.drafting .frame-label::after { content: " • drafting"; opacity: .85; }.canvas-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: white; border-radius: inherit; }
+/* Drag handles: 4 thin strips at the frame edges so the iframe in the middle
+   stays fully interactive (clickable). Each strip is 12px wide just outside the frame. */
+.canvas-frame .frame-drag-handle { position: absolute; cursor: grab; }.canvas-frame.grabbing .frame-drag-handle { cursor: grabbing; }
+.canvas-frame .frame-drag-handle.top    { top: -12px; left: 0; right: 0; height: 12px; }
+.canvas-frame .frame-drag-handle.bottom { bottom: -12px; left: 0; right: 0; height: 12px; }
+.canvas-frame .frame-drag-handle.left   { top: 0; bottom: 0; left: -12px; width: 12px; }
+.canvas-frame .frame-drag-handle.right  { top: 0; bottom: 0; right: -12px; width: 12px; }
+/* Corner zones (above the strips) for a natural grab at corners. */
+.canvas-frame .frame-drag-handle.corner  { width: 16px; height: 16px; }
+.canvas-frame .frame-drag-handle.tl { top: -12px; left: -12px; }
+.canvas-frame .frame-drag-handle.tr { top: -12px; right: -12px; }
+.canvas-frame .frame-drag-handle.bl { bottom: -12px; left: -12px; }
+.canvas-frame .frame-drag-handle.br { bottom: -12px; right: -12px; }
+/* Frame title sits BELOW the frame (top: 100%) so it never collides with the
+   HUD toolbar above — works even on narrow mobile frames. */
+.frame-label { position: absolute; top: 100%; left: 0; margin-top: 8px; padding: 2px 8px; border-radius: 6px; color: #d8e3dc; background: rgba(9,14,12,.9); font-family: ui-monospace, monospace; font-size: 11px; white-space: nowrap; transform-origin: top left; transform: scale(var(--hud-scale, 1)); pointer-events: none; }
+/* HUD floating toolbar — compact, sits flush on top-right corner of frame.
+   Counter-scaled via --hud-scale so buttons stay crisp at any zoom. */
+.frame-hud { position: absolute; bottom: 100%; right: 0; display: flex; align-items: center; gap: 6px; padding: 0 0 8px 0; opacity: 0; pointer-events: none; transition: opacity .12s; transform-origin: bottom right; transform: scale(var(--hud-scale, 1)); }
+.canvas-frame:hover .frame-hud, .canvas-frame.selected .frame-hud { opacity: 1; pointer-events: auto; }
+/* Device selector — vertical button group overlaid at top-left INSIDE the frame.
+   Appears on hover/select so it doesn't cover preview content while idle. */
+.frame-devices { position: absolute; top: 8px; left: 8px; z-index: 6; display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid rgba(208,220,212,.16); border-radius: 9px; background: rgba(9,14,12,.92); backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .12s; transform-origin: top left; transform: scale(var(--hud-scale, 1)); }
+.canvas-frame:hover .frame-devices, .canvas-frame.selected .frame-devices { opacity: 1; pointer-events: auto; }
+.frame-devices button { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0; border: 0; border-radius: 6px; color: #90a197; background: transparent; cursor: pointer; }
+.frame-devices button:hover { color: #f4fbf6; background: rgba(255,255,255,.08); }
+.frame-devices button.active { color: #f4fbf6; background: rgba(76,179,127,.18); }
+.frame-devices svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.hud-group { display: flex; gap: 2px; padding: 3px; border: 1px solid rgba(208,220,212,.16); border-radius: 9px; background: rgba(9, 14, 12, .92); backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.hud-group button { min-width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 6px; color: #90a197; background: transparent; cursor: pointer; font-size: 13px; }.hud-group button:hover { color: #f4fbf6; background: rgba(255,255,255,.08); }.hud-group button.active { color: #f4fbf6; background: rgba(76,179,127,.18); }
+.hud-group svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+/* Canvas controls (zoom) — outside viewport so they never pan/zoom */
+.canvas-controls { position: absolute; bottom: 18px; left: 18px; z-index: 30; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid rgba(208,220,212,.16); border-radius: 10px; background: rgba(9, 14, 12, .92); backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,.35); }.canvas-controls button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; color: #b6c4ba; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; }.canvas-controls button:hover { background: rgba(255,255,255,.08); color: #f4fbf6; }.canvas-controls .zoom-fit { font-size: 13px; }
+.zoom-label { min-width: 44px; text-align: center; color: #8ea197; font-family: ui-monospace, monospace; font-size: 11px; user-select: none; }
+.canvas-empty-hint { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6f8077; font-size: 13px; pointer-events: none; }.canvas-empty-hint b { display: block; font-size: 16px; color: #9fb0a6; margin-bottom: 6px; }
 
 @keyframes spin { to { transform: rotate(360deg); } } @keyframes rise { from { opacity: 0; transform: translateY(4px); } } @keyframes pulse-dot { 0%, 80%, 100% { opacity: .35; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-1px); } } @keyframes lightbox-in { from { opacity: 0; } }
 @media (max-width: 900px) { .session-grid { grid-template-columns: repeat(2, 1fr); }.workspace-main { grid-template-columns: minmax(260px, 300px) 10px minmax(0, 1fr); }.viewport-tabs span,.header-button span { display: none; }.files-drawer { left: 0; }.file-workspace { grid-template-columns: 160px 1fr; } }

@@ -1,8 +1,8 @@
 # SiberCraft
 
-**Buat tampilan web dengan AI, langsung dari percakapan.**
+**Buat tampilan web dengan AI, langsung dari percakapan — di atas canvas tanpa batas.**
 
-SiberCraft membantu mengubah ide atau gambar referensi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, lalu AI akan membuat dan memperbarui hasilnya di area preview.
+SiberCraft mengubah ide, gambar referensi, atau deskripsi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, AI akan membuat frame preview di canvas luas yang bisa di-pan, di-zoom, dan di-drag — mirip Figma atau Canva.
 
 Anda tidak harus memahami pemrograman untuk mulai menggunakan SiberCraft, dan **tidak perlu mendaftar** — bisa langsung dipakai sebagai tamu.
 
@@ -20,14 +20,41 @@ SiberCraft dapat membantu membuat berbagai tampilan, misalnya:
 - Prototype dengan tombol dan interaksi sederhana
 - Tampilan baru berdasarkan screenshot atau gambar referensi
 
-## Cara kerja
+## Konsep utama: Canvas Workspace
 
-Tampilan SiberCraft terbagi menjadi dua area utama:
+Saat membuka sebuah project, Anda langsung masuk ke **canvas workspace** — sebuah area kerja tanpa batas (infinite canvas) yang diilhami editor seperti Figma, Canva, dan draw.io.
 
-- **Panel percakapan di sebelah kiri** untuk menulis permintaan dan melihat proses AI.
-- **Live preview di sebelah kanan** untuk melihat hasil tampilan yang sedang dibuat.
+### Panel percakapan (collapsible)
 
-Ketika Anda mengirim permintaan, AI akan membaca kebutuhan, memperbarui resource sesi, dan menampilkan hasilnya pada preview. Untuk proses yang lebih besar, perubahan dapat terlihat secara bertahap melalui **Live Draft Preview** sebelum hasil akhirnya selesai.
+- Panel chat berada di **sebelah kiri** dan **buka-tutup**.
+- Saat ditutup, canvas menjadi **seluas layar penuh** sehingga Anda bebas mengamati semua frame.
+- Seluruh percakapan, riwayat, dan status proses AI tetap dapat diakses dari panel ini.
+
+### Frame preview
+
+- Setiap permintaan dapat menghasilkan satu atau lebih **frame** di canvas.
+- Setiap frame adalah **preview live** dari satu file HTML di workspace project — interaktif (bisa diklik, di-scroll, diisi form).
+- **AI yang mengelola frame**: AI memanggil tool `create_frame` untuk mendaftarkan frame baru, lalu menulis isi file-nya. Anda tidak perlu membuat frame secara manual.
+- Nama frame diambil dari nama file (mis. `dashboard.html` → "dashboard").
+- Posisi frame otomatis ditata (auto-layout) saat dibuat, lalu Anda bebas men-drag-nya.
+
+### Navigasi canvas
+
+- **Drag area kosong** → geser (pan) seluruh canvas.
+- **Ctrl/Cmd + scroll** → zoom around cursor.
+- **Drag tepi frame** (border strip) → pindahkan frame.
+- **Klik tengah frame** → berinteraksi dengan konten preview (tombol, link, form).
+- Tombol zoom (− / % / + / ⊡) tersedia di header dan pojok canvas.
+- **Auto-fit**: semua frame otomatis di-zoom agar terlihat dan ter-center saat masuk atau setelah turn AI selesai.
+
+### Live preview saat AI bekerja
+
+Saat AI sedang membuat atau mengubah file, canvas menampilkan **preview yang ter-update secara bertahap** (streaming):
+
+- Frame yang sedang dibangun mendapat outline dan label "drafting".
+- Canvas **otomatis zoom-in** ke frame yang sedang diedit, lalu **kembali ke fit-all** setelah turn selesai.
+- Bila AI mengedit beberapa frame dalam satu turn, fokus **bergantian** mengikuti file yang sedang dikerjakan.
+- Indikator status menunjukkan tool mana yang sedang berjalan beserta posisinya (mis. "Writing file (2/4)").
 
 ## Akun, mode anonim, dan proyek publik
 
@@ -65,23 +92,15 @@ Setiap akun memiliki **peran (role)** dan **tier**:
 
 Project yang dibuat dalam mode anonim bersifat **publik** dan dapat dilihat oleh semua orang di halaman utama, layaknya galeri komunitas.
 
-- Siapa pun dapat **melihat** dan membuka preview project publik.
+- Siapa pun dapat **melihat** dan membuka preview project publik di canvas (mode read-only).
 - Namun, hanya **pemilik** yang dapat mengedit, mengobrol, atau menghapus project miliknya sendiri.
-- Saat Anda membuka project publik milik orang lain, workspace berubah menjadi **mode read-only** dengan banner kuning sebagai penanda. Tombol chat, hapus, dan edit akan dinonaktifkan.
-
-Pembatasan edit ini memastikan batas project anonim tetap efektif dan mencegah perubahan tanpa izin pada project orang lain.
+- Saat Anda membuka project publik milik orang lain, tombol chat dan hapus dinonaktifkan.
 
 ## Mulai menggunakan SiberCraft
 
-### 1. Buat sesi baru
+### 1. Buat project baru
 
-Dari halaman utama, pilih **Sesi baru**, kemudian:
-
-1. Masukkan nama project.
-2. Pilih blank canvas atau template dashboard.
-3. Tekan **Buat sesi**.
-
-Setiap sesi menyimpan percakapan, resource, preview, dan riwayat perubahannya sendiri.
+Dari halaman utama, pilih **Sesi baru**, masukkan nama project, pilih template (blank canvas atau dashboard), lalu tekan **Buat sesi**. Anda langsung masuk ke canvas workspace.
 
 ### 2. Jelaskan tampilan yang diinginkan
 
@@ -97,53 +116,81 @@ daftar fitur, testimoni, dan tombol mulai gratis.
 
 Tekan **Enter** untuk mengirim. Gunakan **Shift + Enter** jika ingin membuat baris baru.
 
-### 3. Tambahkan gambar referensi (opsional)
+### 3. Amati proses di canvas
 
-Tekan ikon gambar di area chat untuk menambahkan screenshot, wireframe, foto, atau referensi visual. Gambar yang dipilih akan muncul sebagai thumbnail dan dapat dihapus sebelum permintaan dikirim.
+Saat AI bekerja:
 
-SiberCraft otomatis menggunakan AI yang dapat memahami gambar pada permintaan tersebut. Jika permintaan berikutnya hanya berisi teks, aplikasi kembali menggunakan AI utama secara otomatis. Anda tidak perlu mengganti mode secara manual.
+- Frame baru muncul di canvas seketika (AI memanggil `create_frame`), dengan label file-nya.
+- Canvas otomatis zoom-in ke frame yang sedang dibangun.
+- Preview terisi bertahap (streaming) sampai selesai, lalu canvas kembali ke tampilan semua frame.
+- Panel chat menampilkan setiap langkah AI (tool calls) beserta status proses.
 
-Format yang didukung adalah PNG, JPEG, WebP, dan GIF, dengan batas:
+### 4. Tambahkan gambar referensi (opsional)
 
-- Maksimal 4 gambar dalam satu permintaan
-- Maksimal 1 MB untuk setiap gambar
-- Maksimal 4 MB untuk seluruh gambar dalam satu permintaan
+Tekan ikon gambar di area chat untuk menambahkan screenshot, wireframe, foto, atau referensi visual. SiberCraft otomatis menggunakan AI multimodal pada permintaan yang berisi gambar.
 
-Contoh permintaan dengan gambar:
-
-```text
-Buat dashboard baru dengan susunan seperti gambar ini.
-Gunakan dark mode, pertahankan struktur utamanya,
-tetapi gunakan warna dan isi yang sesuai untuk monitoring server.
-```
-
-### 4. Amati proses dan preview
-
-Saat AI bekerja, panel chat akan menampilkan status proses. Jika AI perlu membaca atau menulis resource, aktivitas tersebut muncul dalam grup **Tool calls**.
-
-Grup ini sengaja dibuat ringkas dan tertutup secara default. Anda dapat membukanya setelah proses selesai untuk melihat detail aktivitas.
-
-Preview akan berubah otomatis. Saat resource berukuran besar sedang dibuat, draft dapat tampil secara bertahap sehingga proses tidak terlihat berhenti.
+Format yang didukung: PNG, JPEG, WebP, dan GIF (maksimal 4 gambar, 1 MB per gambar, 4 MB total per permintaan).
 
 ### 5. Lanjutkan dengan revisi
 
-Tidak perlu mengulang semua penjelasan dari awal. Anda dapat memberikan revisi lanjutan seperti:
+Anda dapat memberikan revisi lanjutan seperti:
 
 ```text
 Ubah warna utama menjadi biru gelap dan kecilkan tinggi header.
 ```
 
 ```text
-Tambahkan chart pendapatan bulanan di bawah kartu statistik.
-```
-
-```text
-Buat versi mobile lebih ringkas dan ubah sidebar menjadi menu hamburger.
+Buat versi mobile untuk halaman login di frame baru.
 ```
 
 AI akan menggunakan konteks percakapan dan kondisi project pada sesi yang sama.
 
-## Cara menulis prompt yang efektif
+## Fitur utama
+
+### Canvas tanpa batas
+
+Canvas dapat di-pan dan di-zoom tanpa batas, menampung banyak frame sekaligus. Layout otomatis menata frame baru, dan Anda bebas men-drag ulang posisinya.
+
+### AI yang mengelola frame
+
+AI memutuskan kapan membuat frame baru lewat tool `create_frame`, memilih ukuran device (desktop/tablet/mobile) sesuai konteks permintaan, dan menulis isi file-nya. Sebagai fallback, bila AI lupa mendaftarkan frame, sistem otomatis membuat frame saat file HTML pertama kali ditulis.
+
+### Streaming live preview
+
+Saat AI membuat atau mengubah file, preview di frame bersangkutan ter-update secara bertahap (bukan hanya hasil akhir). Anda melihat proses pembangunan secara real-time.
+
+### Auto-zoom mengikuti frame aktif
+
+Canvas otomatis zoom-in ke frame yang sedang diedit agar terlihat jelas, lalu kembali ke tampilan menyeluruh (fit-all) setelah turn selesai. Bila AI mengedit beberapa frame bergantian dalam satu turn, fokus mengikutinya.
+
+### Multi-frame dalam satu sesi
+
+Satu sesi percakapan dapat memiliki banyak frame, masing-masing menampilkan file HTML berbeda dari workspace yang sama. Ini cocok untuk membuat beberapa halaman sekaligus (mis. dashboard + landing + login).
+
+### Preview interaktif
+
+Frame preview adalah iframe sandbox yang interaktif — Anda dapat mengklik tombol, mengisi form, dan men-scroll konten di dalamnya, sama seperti membuka halaman web sungguhan.
+
+### Diagram terstruktur
+
+Untuk permintaan flowchart, diagram alur, sequence diagram, dan bentuk sejenis, AI akan menggunakan Mermaid.js secara default.
+
+### Undo
+
+Gunakan tombol **Undo** di header canvas untuk membatalkan perubahan terakhir. Undo mencakup seluruh workspace (semua file), sehingga konsisten untuk project multi-frame.
+
+### Export per-frame
+
+Setiap frame memiliki tombol export di HUD-nya (muncul saat hover/select):
+
+- **Export HTML** — unduh file HTML tunggal (semua aset di-inline).
+- **Export image** — screenshot penuh frame sebagai PNG dengan lebar sesuai device.
+
+### Migrasi project lama
+
+Project yang dibuat sebelum adanya canvas workspace otomatis dimigrasi saat dibuka: sistem membuat frame untuk file `index.html` yang sudah ada, sehingga konten lama tetap terlihat. Untuk project publik milik orang lain, migrasi dilakukan secara ephemeral di sisi client.
+
+## Tips menulis prompt
 
 Prompt yang baik biasanya menjelaskan beberapa hal berikut:
 
@@ -163,146 +210,7 @@ tabel barang hampir habis, serta aktivitas terbaru.
 Gunakan warna netral dengan aksen oranye dan pastikan nyaman di mobile.
 ```
 
-Jika hasil pertama belum sesuai, berikan koreksi yang spesifik. Contohnya, gunakan “padding kartu terlalu besar, kecilkan menjadi lebih rapat” daripada hanya mengatakan “kurang bagus”.
-
-## Fitur utama
-
-### Sesi terpisah
-
-Setiap project dibuat sebagai sesi sendiri. Percakapan dan resource dari satu sesi tidak bercampur dengan sesi lain. Sesi terakhir dapat dibuka kembali dari halaman utama.
-
-### Live Draft Preview
-
-Ketika AI membuat resource baru, preview dapat menampilkan hasil sementara selama proses berlangsung. Setelah selesai, draft otomatis diganti dengan hasil final yang stabil.
-
-### Memahami gambar referensi
-
-SiberCraft dapat membaca gambar yang dilampirkan pada chat dan menggunakannya sebagai konteks untuk membuat atau memperbaiki tampilan. Mode AI yang sesuai dipilih otomatis untuk setiap permintaan, sehingga penggunaan gambar tidak memengaruhi permintaan teks berikutnya.
-
-Gambar yang dikirim disimpan bersama resource sesi agar tetap tersedia saat project dibuka kembali.
-
-### Menggunakan website sebagai referensi
-
-Jika prompt berisi URL website dan meminta tampilan yang mirip atau terinspirasi dari website tersebut, AI dapat menjalankan tool `capture_webpage_screenshot`. Tool ini mengambil PNG melalui `WEB_SCREENSHOT_API_URL`, lalu menyimpannya ke folder `screenshots/` di workspace sesi.
-
-Iterasi pertama menggunakan AI utama untuk memilih dan menjalankan tool. Setelah screenshot tersedia, iterasi berikutnya otomatis menggunakan AI multimodal untuk membaca referensi visual tersebut. UI menampilkan perpindahan model yang terjadi selama turn.
-
-### Diagram yang terstruktur
-
-Untuk permintaan flowchart, diagram alur, diagram proses, dan bentuk sejenis, AI akan menggunakan format diagram terstruktur. Hasilnya lebih mudah dibaca, disusun ulang, dan diperbarui melalui permintaan lanjutan.
-
-### Pilihan ukuran preview
-
-Gunakan tombol pada toolbar preview untuk memeriksa tampilan dalam ukuran:
-
-- Desktop
-- Tablet
-- Mobile
-
-Preview juga dapat direfresh secara manual atau dibuka pada tab browser baru.
-
-### Files
-
-Menu **Files** menampilkan resource yang digunakan oleh mockup. Pengguna yang memahami kode dapat membuka dan mengedit isinya secara manual.
-
-Jika Anda tidak memahami kode, sebaiknya lakukan perubahan melalui chat agar AI dapat menjaga susunan project tetap konsisten.
-
-### Undo
-
-Gunakan tombol **Undo** untuk membatalkan perubahan terakhir dan mengembalikan project ke kondisi sebelumnya.
-
-Undo tersedia setelah terdapat perubahan yang berhasil disimpan pada sesi.
-
-### Stop
-
-Ketika AI sedang bekerja, tombol kirim berubah menjadi tombol **Stop**. Gunakan tombol ini jika ingin menghentikan proses yang sedang berjalan.
-
-Draft yang belum selesai akan dibersihkan dan preview kembali menggunakan hasil terakhir yang valid.
-
-### Informasi penggunaan AI
-
-Angka pada header menunjukkan penggunaan AI untuk proses terakhir. Nilainya di-reset ketika permintaan baru dimulai, kemudian dihitung kembali sampai pekerjaan tersebut selesai.
-
-Di akhir setiap jawaban terdapat label kecil yang menunjukkan AI yang digunakan pada permintaan tersebut, termasuk apakah permintaan diproses dalam mode utama atau mode gambar. Informasi ini disimpan bersama percakapan dan tetap terlihat ketika sesi dibuka kembali.
-
-### Hapus sesi
-
-Sesi dapat dihapus dari kartu pada halaman utama atau dari tombol hapus di dalam workspace.
-
-SiberCraft akan meminta konfirmasi terlebih dahulu. Menghapus sesi juga menghapus percakapan, resource, preview, dan seluruh riwayat perubahan sesi tersebut.
-
-## Panel admin
-
-Pengguna dengan peran **admin** dapat mengakses panel administrasi melalui menu pengguna (klik avatar di pojok kanan atas, lalu pilih **⚙ Admin panel**). Panel admin juga dapat dibuka melalui tautan `/#admin`.
-
-### Manajemen pengguna
-
-Bagian ini menampilkan seluruh akun terdaftar beserta peran (role), tier, status (pending/aktif), jumlah project, dan tanggal dibuat.
-
-- **Aktifkan manual** — admin dapat mengaktifkan akun pengguna yang masih berstatus pending tanpa perlu menunggu verifikasi email.
-- **Hapus pengguna** — menghapus akun juga **menghapus seluruh project** milik pengguna tersebut secara permanen. Konfirmasi diperlukan sebelum penghapusan dilakukan. Admin tidak dapat menghapus akunnya sendiri.
-- **Ubah peran/tier** — peran dan tier pengguna dapat diubah (misalnya menjadikan pengguna lain sebagai admin atau menaikkan tier).
-
-## Export hasil
-
-Gunakan tombol **Export** pada header workspace untuk mengunduh hasil dalam dua format:
-
-- **Single HTML** menggabungkan halaman, tampilan, interaksi, dan gambar lokal menjadi satu file HTML yang mudah dipindahkan atau dibuka kembali.
-- **Full-page image** mengambil screenshot penuh preview saat ini dan menyimpannya sebagai gambar PNG.
-
-Export gambar mengikuti ukuran preview yang sedang dipilih. Pilih mode desktop, tablet, atau mobile terlebih dahulu jika membutuhkan ukuran tertentu. Beberapa resource dari internet tetap memerlukan koneksi ketika Single HTML dibuka.
-
-## Memahami status proses
-
-Beberapa status yang mungkin terlihat:
-
-- **AI working** — AI sedang memahami permintaan atau menyiapkan langkah berikutnya.
-- **Reading file** — AI sedang memeriksa resource yang sudah ada.
-- **Writing file** — AI sedang membuat atau memperbarui resource.
-- **Live draft** — preview sedang menampilkan hasil sementara.
-- **Ready** — proses selesai dan aplikasi siap menerima permintaan baru.
-- **Error** — proses tidak dapat diselesaikan; pesan penyebab akan ditampilkan pada chat.
-
-## Contoh penggunaan
-
-### Membuat dashboard
-
-```text
-Buat dashboard penjualan dark mode dengan sidebar di kiri,
-empat kartu KPI, line chart pendapatan, dan tabel transaksi terakhir.
-```
-
-### Membuat diagram
-
-```text
-Buat diagram alur onboarding pengguna dari registrasi sampai aktivasi.
-Gunakan node yang dapat diklik dan panel detail di sebelah kanan.
-```
-
-### Memperbaiki tampilan
-
-```text
-Rapikan jarak antarbagian, kecilkan ruang di dalam kartu,
-dan buat tombol utama tidak terlalu mencolok.
-```
-
-### Menambahkan interaksi
-
-```text
-Tambahkan filter periode pada chart dan modal detail
-ketika salah satu baris tabel ditekan.
-```
-
-## Tips penggunaan
-
-- Mulai dari struktur utama, kemudian lakukan revisi secara bertahap.
-- Berikan contoh teks dan data agar preview terasa lebih nyata.
-- Lampirkan screenshot atau referensi visual jika susunan yang diinginkan sulit dijelaskan dengan teks.
-- Sebutkan bagian yang sudah bagus agar AI tidak mengubahnya.
-- Periksa mode desktop dan mobile sebelum menyelesaikan sesi.
-- Gunakan Undo segera jika perubahan terakhir tidak sesuai.
-- Buat sesi berbeda untuk project yang tidak berhubungan.
-- Hindari memasukkan password, kode akses rahasia, data pribadi, atau gambar sensitif ke dalam prompt.
+Jika hasil pertama belum sesuai, berikan koreksi yang spesifik. Contohnya, gunakan "padding kartu terlalu besar, kecilkan menjadi lebih rapat" daripada hanya mengatakan "kurang bagus".
 
 ## Pertanyaan umum
 
@@ -314,49 +222,25 @@ Tidak. Seluruh proses utama dapat dilakukan melalui percakapan. Menu Files terse
 
 Tidak. Anda dapat langsung memakai SiberCraft sebagai tamu (anonim). Namun membuat akun membuat project tersimpan permanen, bisa diakses dari perangkat lain, serta menghapus batas jumlah project anonim.
 
-### Apakah project anonim saya aman?
+### Bagaimana cara membuat banyak frame?
 
-Project anonim bersifat publik dan dapat dilihat orang lain. Namun hanya pemilik yang dapat mengeditnya. Untuk menjaga project tetap pribadi, buat akun — project anonim Anda akan otomatis dipindahkan ke akun saat login pertama.
+Cukup jelaskan kebutuhan Anda. AI akan memanggil `create_frame` untuk setiap halaman/surface yang relevan. Misalnya: "Buat dashboard, landing page, dan halaman login" kemungkinan menghasilkan tiga frame terpisah.
 
-### Saya tidak menerima email verifikasi. Apa yang harus dilakukan?
+### Mengapa canvas otomatis zoom saat AI bekerja?
 
-Periksa folder spam. Jika tidak ada, coba daftar ulang dengan email yang sama (jika pendaftaran sebelumnya gagal, email dibebaskan untuk dicoba lagi). Pastikan juga pengelola aplikasi telah mengonfigurasi SMTP dengan benar.
+Agar Anda dapat melihat detail frame yang sedang dibangun dengan jelas. Setelah turn selesai, canvas kembali ke tampilan menyeluruh agar semua frame terlihat.
 
-### Mengapa saya tidak bisa mengedit sebuah project?
+### Bisakah saya berinteraksi dengan konten di dalam frame?
 
-Jika project tersebut dibuat oleh pengguna lain dalam mode anonim (proyek publik), workspace akan masuk mode read-only. Hanya pemilik yang dapat mengedit. Buat project sendiri atau login untuk mengelola project pribadi Anda.
-
-### Bagaimana cara menjadi admin?
-
-Admin ditentukan oleh pengelola aplikasi melalui konfigurasi `ADMIN_EMAILS`. Jika email Anda terdaftar di sana, akun Anda otomatis mendapat peran admin saat mendaftar.
-
-### Mengapa preview berubah beberapa kali saat AI bekerja?
-
-SiberCraft menampilkan draft secara bertahap. Tampilan sementara mungkin belum lengkap, tetapi akan diganti dengan hasil final ketika proses selesai.
+Ya. Frame adalah preview live yang interaktif — klik tombol, isi form, dan scroll konten di dalamnya. Untuk men-drag frame itu sendiri, tarik dari tepi (border strip) di sekeliling frame.
 
 ### Apakah percakapan lama masih tersimpan?
 
 Ya. Percakapan dan resource disimpan sesuai sesinya sehingga dapat dibuka kembali selama sesi tersebut belum dihapus.
 
-### Kapan mode gambar digunakan?
-
-Mode gambar hanya digunakan ketika permintaan saat ini memiliki gambar terlampir. Permintaan berikutnya yang hanya berisi teks akan kembali menggunakan mode utama secara otomatis.
-
-### Mengapa informasi AI berbeda pada beberapa jawaban?
-
-SiberCraft memilih AI sesuai isi setiap permintaan. Label kecil di akhir jawaban membantu menunjukkan mode yang digunakan tanpa perlu membuka pengaturan teknis.
-
 ### Apa yang terjadi jika proses dihentikan?
 
-Proses AI dihentikan, draft sementara dibersihkan, dan preview kembali ke hasil terakhir yang berhasil disimpan.
-
-### Mengapa tombol Undo tidak dapat ditekan?
-
-Undo hanya aktif jika sesi memiliki perubahan sebelumnya yang dapat dikembalikan.
-
-### Apakah sesi yang sudah dihapus dapat dikembalikan?
-
-Tidak. Penghapusan sesi bersifat permanen, sehingga pastikan sesi memang tidak diperlukan sebelum menyetujui konfirmasi.
+Proses AI dihentikan, dan canvas kembali ke kondisi terakhir yang berhasil disimpan.
 
 ## Penyiapan untuk pengelola aplikasi
 
@@ -417,12 +301,12 @@ Konfigurasi lainnya (model AI, screenshot API, optimasi konteks) dijelaskan di `
 ### Penyimpanan data
 
 - **Data pengguna dan token verifikasi** disimpan di **SQLite** (`data/app.db`).
-- **Project/sesi** (percakapan, resource, preview, checkpoint) disimpan sebagai **file** di `data/sessions/`.
+- **Project/sesi** (percakapan, resource, preview, checkpoint, dan metadata frame) disimpan sebagai **file** di `data/sessions/`. Setiap sesi memiliki `session.json` yang menyimpan daftar frame beserta posisi dan device-nya.
 - Seluruh data tersimpan lokal di server tempat SiberCraft dijalankan.
 
 ### Membuat akun admin pertama
 
-Karena pendaftaran memerlukan verifikasi email, cara tercepat membuat akun admin pertama (mis. saat setup production baru) adalah dengan skrip `seed:admin`. Skrip ini membuat/mengubah akun admin langsung di database tanpa perlu email verifikasi:
+Karena pendaftaran memerlukan verifikasi email, cara tercepat membuat akun admin pertama adalah dengan skrip `seed:admin`. Skrip ini membuat/mengubah akun admin langsung di database tanpa perlu email verifikasi:
 
 ```bash
 # Buat akun admin baru (password diminta interaktif, tersembunyi)
@@ -443,11 +327,7 @@ Skrip ini akan:
 
 Pastikan `SESSION_SECRET` sudah diisi di `.env` **sebelum** login, agar sesi tidak hilang saat server di-restart.
 
-Alternatif lain: daftarkan email admin melalui halaman Register (email tersebut harus tercantum di `ADMIN_EMAILS` agar otomatis mendapat peran admin).
-
 ### Checklist migrasi ke production
-
-Saat memindahkan SiberCraft dari development ke server production, perhatikan hal berikut:
 
 | Item | Development | Production |
 |------|-------------|------------|
@@ -472,6 +352,6 @@ Jika aplikasi tidak dapat dibuka atau status AI menunjukkan belum siap, hubungi 
 
 ---
 
-SiberCraft dirancang agar proses membuat interface terasa seperti berdiskusi dengan rekan desain dan pengembangan: jelaskan ide, lampirkan referensi jika diperlukan, lihat hasilnya, lalu revisi sampai sesuai.
+SiberCraft dirancang agar proses membuat interface terasa seperti berdiskusi dengan rekan desain dan pengembangan: jelaskan ide, lihat frame tumbuh secara live di canvas, lalu revisi sampai sesuai.
 
 Dikembangkan oleh **datasiberLab**. Kontak: [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)

@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, extname, posix } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 
-export async function buildStandaloneHtml(workspaceDir) {
-  const entryPath = await resolveWithin(workspaceDir, "index.html");
+export async function buildStandaloneHtml(workspaceDir, entryFile = "index.html") {
+  const entryPath = await resolveWithin(workspaceDir, entryFile);
   let html = await readFile(entryPath, "utf8");
 
   html = await replaceAsync(html, /<link\b[^>]*>/gi, async (tag) => {
