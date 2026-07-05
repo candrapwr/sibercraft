@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { config } from "./config.js";
 import { isConversationalPrompt, runAgent } from "./agent.js";
-import { buildStandaloneHtml } from "./exporter.js";
+import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./exporter.js";
 import { HttpError, SessionStore } from "./session-store.js";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureFullPage } from "./screenshot.js";
@@ -215,6 +215,50 @@ async function handleApi(request, response, url, user) {
       "Cache-Control": "no-store",
     });
     response.end(image);
+    return;
+  }
+  // Export a single frame's HTML + locally-referenced assets as a ZIP.
+  if (method === "GET" && action === "export/zip") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
+    const session = await store.getForView(id, access);
+    const entryFile = normalizeDraftPath(url.searchParams.get("file") || "") || "index.html";
+    const zip = await buildFileZip(store.workspaceDir(id), entryFile);
+    response.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${safeFilename(session.name)}.zip"`,
+      "Content-Length": zip.length,
+      "Cache-Control": "no-store",
+    });
+    response.end(zip);
+    return;
+  }
+  // Export the ENTIRE workspace (all files + per-frame screenshots) as a ZIP.
+  if (method === "GET" && action === "export/zip-all") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
+    const session = await store.getForView(id, access);
+    // Capture a screenshot per frame (best-effort; skipped on failure).
+    const extra = [];
+    const frames = Array.isArray(session.frames) ? session.frames : [];
+    for (const frame of frames) {
+      const file = normalizeDraftPath(frame.file || "") || "index.html";
+      const width = Math.min(2560, Math.max(320, (frame.w) || 1280));
+      const previewUrl = `http://127.0.0.1:${config.port}/preview/${id}/${encodeURIComponent(file)}?export=${Date.now()}`;
+      try {
+        const image = await captureFullPage({ url: previewUrl, width });
+        const base = file.replace(/\.html?$/i, "");
+        extra.push({ path: `screenshots/${base || "preview"}.png`, data: image });
+      } catch {
+        // screenshot unavailable (no headless browser) — skip silently
+      }
+    }
+    const zip = await buildWorkspaceZip(store.workspaceDir(id), extra);
+    response.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${safeFilename(session.name)}.zip"`,
+      "Content-Length": zip.length,
+      "Cache-Control": "no-store",
+    });
+    response.end(zip);
     return;
   }
   if (method === "GET" && action === "file") {

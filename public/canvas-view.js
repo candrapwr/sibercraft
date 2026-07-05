@@ -58,6 +58,7 @@ function init() {
   dockToggleEl?.addEventListener("click", toggleDock);
   $("#cvUndoButton")?.addEventListener("click", undoFromCanvas);
   $("#cvBackButton")?.addEventListener("click", leave);
+  $("#cvExportAllButton")?.addEventListener("click", exportAll);
 
   // Export hooks used by canvas.js HUD.
   window.__sibercraftExportFrame = exportFrame;
@@ -364,6 +365,29 @@ async function exportFrameHtml(state) {
     URL.revokeObjectURL(url);
   } catch (e) {
     alert(e.message);
+  }
+}
+
+/** Export the ENTIRE workspace (all files + per-frame screenshots) as a ZIP. */
+async function exportAll() {
+  if (!session) return;
+  const btn = document.getElementById("cvExportAllButton");
+  let origText = null;
+  if (btn) { origText = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Exporting…"; }
+  try {
+    const res = await fetch(`/api/sessions/${session.id}/export/zip-all`);
+    if (!res.ok) throw new Error("Export All gagal");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${session.name || "project"}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    if (btn && origText != null) { btn.disabled = false; btn.textContent = origText; }
   }
 }
 

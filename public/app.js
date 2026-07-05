@@ -152,6 +152,8 @@ const translations = {
     toolCopyFile: "Copying file",
     toolCaptureWebpage: "Capturing website screenshot",
     toolCreateFrame: "Creating frame",
+    exportZip: "Export assets (ZIP)",
+    exportAll: "Export all assets (ZIP)",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 projects",
   },
@@ -302,6 +304,8 @@ const translations = {
     toolCopyFile: "Copying file",
     toolCaptureWebpage: "Mengambil screenshot website",
     toolCreateFrame: "Membuat frame",
+    exportZip: "Export aset (ZIP)",
+    exportAll: "Export semua aset (ZIP)",
     workspaceTitle: "{name} — SiberCraft",
     sessionsZero: "0 proyek",
   },
@@ -487,6 +491,8 @@ function applyStaticText() {
   for (const id of ["cvZoomFit", "cvCtrlZoomFit"]) { const el = $("#" + id); if (el) { el.title = t("fitAllFrames"); el.setAttribute("aria-label", t("fitAllFrames")); } }
   const dockToggle = $("#chatDockToggle");
   if (dockToggle) { dockToggle.title = t("collapseChat"); dockToggle.setAttribute("aria-label", t("collapseChat")); }
+  const cvExportAll = $("#cvExportAllButton");
+  if (cvExportAll) { cvExportAll.title = t("exportAll"); const sp = $("span", cvExportAll); if (sp) sp.textContent = t("export"); }
   const emptyTitle = $(".canvas-empty-hint b");
   const emptyBody = $(".canvas-empty-hint span");
   if (emptyTitle) emptyTitle.textContent = t("canvasEmptyTitle");

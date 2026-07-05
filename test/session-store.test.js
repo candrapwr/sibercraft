@@ -17,14 +17,15 @@ test("session menyimpan workspace, history, dan undo secara terpisah", async (t)
   assert.notEqual(first.id, second.id);
   assert.equal((await store.list()).length, 2);
 
+  // Workspace dimulai kosong (file dibuat oleh AI saat chat). Buat file manual untuk test undo.
+  await writeFile(join(store.workspaceDir(first.id), "app.js"), "original", "utf8");
   await store.saveHistory(first.id, [{ role: "user", content: "ubah halaman" }]);
   await store.createCheckpoint(first.id, 0);
   await writeFile(join(store.workspaceDir(first.id), "app.js"), "changed", "utf8");
   await store.undo(first.id);
 
-  assert.equal(await readFile(join(store.workspaceDir(first.id), "app.js"), "utf8"), 'console.log("Workspace siap");\n');
+  assert.equal(await readFile(join(store.workspaceDir(first.id), "app.js"), "utf8"), "original");
   assert.deepEqual(await store.history(first.id), []);
-  assert.match(await readFile(join(store.workspaceDir(second.id), "app.js"), "utf8"), /Dashboard siap/);
 
   const upload = await store.saveUploadedImage(first.id, {
     name: "referensi.png",

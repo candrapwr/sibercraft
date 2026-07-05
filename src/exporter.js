@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { dirname, extname, posix } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { dirname, extname, join, posix, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
+import { zipFile } from "./zip.js";
 
 export async function buildStandaloneHtml(workspaceDir, entryFile = "index.html") {
   const entryPath = await resolveWithin(workspaceDir, entryFile);
@@ -111,6 +112,85 @@ function mimeType(path) {
 
 function escapeClosingTag(value, tag) {
   return String(value).replace(new RegExp(`</${tag}`, "gi"), `<\\/${tag}`);
+}
+
+/**
+ * Collect a single HTML file plus all locally-referenced assets (CSS, JS, images)
+ * as ZIP entries. Mirrors the dependency-resolution logic of buildStandaloneHtml,
+ * but keeps files separate instead of inlining them.
+ */
+export async function buildFileZip(workspaceDir, entryFile = "index.html") {
+  const entries = new Map(); // path -> Buffer (dedupe by relative path)
+  const queue = [String(entryFile || "index.html")];
+  const visited = new Set();
+
+  while (queue.length) {
+    const rel = queue.shift();
+    if (visited.has(rel)) continue;
+    visited.add(rel);
+    const file = await readWorkspaceAsset(workspaceDir, rel);
+    if (!file) continue;
+    entries.set(file.relativePath, file.content);
+    // If it's HTML, scan for local references to enqueue.
+    if (/\.html?$/i.test(rel)) {
+      const html = file.content.toString("utf8");
+      const refs = extractLocalReferences(html);
+      for (const ref of refs) queue.push(ref);
+    } else if (/\.css$/i.test(rel)) {
+      // CSS url() references — enqueue local ones.
+      const css = file.content.toString("utf8");
+      const base = posix.dirname(file.relativePath.split("\\").join("/"));
+      for (const match of css.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi)) {
+        const value = match[2];
+        if (!isLocalReference(value)) continue;
+        queue.push(posix.join(base, cleanReference(value)));
+      }
+    }
+  }
+
+  return zipFile([...entries].map(([path, data]) => ({ path, data })));
+}
+
+/** Extract local href/src/ references from an HTML document. */
+function extractLocalReferences(html) {
+  const refs = [];
+  const push = (value) => {
+    if (isLocalReference(value)) refs.push(cleanReference(value));
+  };
+  for (const tag of html.matchAll(/<(?:link|script|img|source|video|audio|input)\b[^>]*>/gi)) {
+    push(attribute(tag[0], "href"));
+    push(attribute(tag[0], "src"));
+  }
+  return refs;
+}
+
+/**
+ * Collect the ENTIRE workspace (all files recursively) as ZIP entries.
+ * @param {string} workspaceDir
+ * @param {Array<{path: string, data: Buffer}>} [extra] — additional entries (e.g. screenshots)
+ */
+export async function buildWorkspaceZip(workspaceDir, extra = []) {
+  const entries = [];
+  await walkWorkspace(workspaceDir, async (fullPath, info) => {
+    if (!info.isFile()) return;
+    const rel = relative(workspaceDir, fullPath).split("\\").join("/");
+    if (rel.startsWith(".")) return;
+    entries.push({ path: rel, data: await readFile(fullPath) });
+  });
+  for (const e of extra) {
+    if (e?.path && e?.data) entries.push({ path: e.path, data: e.data });
+  }
+  return zipFile(entries);
+}
+
+async function walkWorkspace(dir, onFile) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) await walkWorkspace(fullPath, onFile);
+    else if (entry.isFile()) await onFile(fullPath, await stat(fullPath));
+  }
 }
 
 function escapeAttribute(value) {

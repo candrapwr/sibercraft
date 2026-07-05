@@ -12,7 +12,6 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
-import { initialWorkspace } from "./templates.js";
 
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
 const DEVICE_SIZES = new Set(["desktop", "tablet", "mobile"]);
@@ -137,9 +136,7 @@ export class SessionStore {
     const workspace = join(sessionDir, "workspace");
     await mkdir(workspace, { recursive: true });
     await mkdir(join(sessionDir, "checkpoints"), { recursive: true });
-    await Promise.all(Object.entries(initialWorkspace(cleanName, template)).map(([path, content]) =>
-      writeFile(join(workspace, path), content, "utf8")
-    ));
+    // Workspace dimulai kosong — file dibuat oleh AI saat user mulai chat.
     await Promise.all([
       atomicJson(join(sessionDir, "session.json"), session),
       atomicJson(join(sessionDir, "messages.json"), []),
