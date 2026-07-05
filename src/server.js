@@ -7,6 +7,7 @@ import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./exporter
 import { HttpError, SessionStore } from "./session-store.js";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureFullPage } from "./screenshot.js";
+import { generateThumbnail, buildLayoutHtml } from "./thumbnail.js";
 import { initDb } from "./db.js";
 import { UserStore } from "./auth-store.js";
 import {
@@ -54,6 +55,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname.startsWith("/preview/")) {
       await handlePreview(response, url);
+      return;
+    }
+    if (url.pathname.startsWith("/__thumb_layout/")) {
+      await handleThumbLayout(request, response, url);
       return;
     }
     await servePublic(response, url.pathname);
@@ -141,6 +146,14 @@ async function handleApi(request, response, url, user) {
       ...session,
       checkpointCount: await store.checkpointCount(session.id),
     })));
+    // Lazy backfill: untuk session yang punya frame tapi belum punya thumbnail,
+    // generate di background (best-effort). Berguna untuk project existing yang
+    // dibuat sebelum fitur thumbnail aktif.
+    for (const session of enriched) {
+      if (Array.isArray(session.frames) && session.frames.length > 0) {
+        backfillThumbnail(session.id);
+      }
+    }
     return sendJson(response, 200, enriched);
   }
   if (method === "POST" && url.pathname === "/api/sessions") {
@@ -319,6 +332,27 @@ async function handleApi(request, response, url, user) {
   }
   if (method === "POST" && action === "chat") {
     return streamChat(request, response, id, access);
+  }
+  if (method === "GET" && action === "thumbnail") {
+    // Existence/access check; admin lihat semua, publik boleh, privat hanya pemilik.
+    const session = await store.getForView(id, access);
+    const thumb = await store.readThumbnail(id);
+    if (!thumb) throw new HttpError(404, "Thumbnail belum tersedia");
+    const etag = `"${session.updatedAt || ""}-${thumb.mtimeMs}"`;
+    if (request.headers["if-none-match"] === etag) {
+      response.writeHead(304, { ETag: etag, "Cache-Control": "private, max-age=3600" });
+      response.end();
+      return;
+    }
+    response.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Length": thumb.buffer.length,
+      "ETag": etag,
+      "Cache-Control": "private, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(thumb.buffer);
+    return;
   }
   throw new HttpError(404, "Endpoint tidak ditemukan");
 }
@@ -525,8 +559,9 @@ async function streamChat(request, response, id, access) {
     if (!finished) controller.abort();
   });
 
+  let result = null;
   try {
-    const result = await runAgent({
+    result = await runAgent({
       session,
       store,
       prompt,
@@ -546,6 +581,11 @@ async function streamChat(request, response, id, access) {
     activeRuns.delete(id);
     previewDrafts.delete(id);
     response.end();
+    // Bila AI mengubah/membuat file, regenerate thumbnail di background.
+    // Fire-and-forget (best-effort): skip diam-diam bila Chrome tidak ada.
+    if (result?.mutated) {
+      generateThumbnailForSession(id).catch(() => {});
+    }
   }
 }
 
@@ -572,6 +612,79 @@ async function handlePreview(response, url) {
     "Content-Security-Policy": "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src https:; frame-ancestors 'self'",
   });
   response.end(content);
+}
+
+/**
+ * Internal layout page used ONLY by the thumbnail generator. Renders all
+ * session frames as same-origin iframes at their fit-all positions over a
+ * grid background, so headless Chrome can screenshot it as a single PNG.
+ * Reachable only from localhost (the headless browser runs on the server).
+ * External requests get a 404 — this is not a public endpoint.
+ */
+async function handleThumbLayout(request, response, url) {
+  if (!isLocalhostRequest(request)) throw new HttpError(404, "Endpoint tidak ditemukan");
+  const match = url.pathname.match(/^\/__thumb_layout\/([0-9a-f-]{36})$/i);
+  if (!match) throw new HttpError(404, "Endpoint tidak ditemukan");
+  const [, id] = match;
+  const session = await store.get(id);
+  const { html } = buildLayoutHtml({
+    id,
+    frames: Array.isArray(session.frames) ? session.frames : [],
+    port: config.port,
+  });
+  response.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    // iframes must be allowed to load same-origin /preview/ URLs.
+    "Content-Security-Policy": "default-src 'self'; frame-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+  });
+  response.end(html);
+}
+
+function isLocalhostRequest(request) {
+  const host = String(request.headers.host || "").toLowerCase();
+  return host.startsWith("127.0.0.1:") || host.startsWith("localhost:") || host === "127.0.0.1" || host === "localhost";
+}
+
+/**
+ * Best-effort thumbnail regeneration. Reads the session, renders a fit-all
+ * PNG via headless Chrome, and caches it at data/sessions/<id>/thumb.png.
+ * Swallows all errors (no Chrome, capture timeout, etc.) — callers may run
+ * this fire-and-forget after a mutating AI turn.
+ */
+async function generateThumbnailForSession(id) {
+  const session = await store.get(id);
+  const frames = Array.isArray(session.frames) ? session.frames : [];
+  if (frames.length === 0) {
+    await store.removeThumbnail(id);
+    return;
+  }
+  const buffer = await generateThumbnail({ id, frames, port: config.port });
+  if (buffer) await store.writeThumbnail(id, buffer);
+}
+
+/**
+ * Backfill thumbnail untuk session yang belum punya, dipicu saat portal diminta.
+ * Idempotent: skip bila thumb sudah ada. Fire-and-forget, swallow semua error.
+ * Menghindari regen berulang setiap GET /api/sessions.
+ */
+const backfillInFlight = new Set();
+function backfillThumbnail(id) {
+  if (backfillInFlight.has(id)) return Promise.resolve();
+  const run = (async () => {
+    try {
+      const existing = await store.readThumbnail(id);
+      if (existing) return; // sudah ada, jangan regen
+      await generateThumbnailForSession(id);
+    } catch {
+      // best-effort: skip diam-diam (mis. Chrome tidak tersedia).
+    } finally {
+      backfillInFlight.delete(id);
+    }
+  })();
+  backfillInFlight.add(id);
+  return run;
 }
 
 function normalizeDraftPath(value) {

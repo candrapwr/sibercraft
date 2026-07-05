@@ -15,6 +15,18 @@ import { resolveWithin } from "./path-sandbox.js";
 
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
 const DEVICE_SIZES = new Set(["desktop", "tablet", "mobile"]);
+// Pixel dimensions per device label. Mirror of frontend DEVICE_SIZE (canvas.js).
+// Used by the thumbnail layout builder to size frames server-side.
+export const DEVICE_SIZE = {
+  desktop: { w: 1280, h: 800 },
+  tablet: { w: 768, h: 1024 },
+  mobile: { w: 390, h: 844 },
+};
+
+/** Resolve a frame's pixel dimensions from its device label (fallback desktop). */
+export function frameDimensions(frame) {
+  return DEVICE_SIZE[frame?.device] || DEVICE_SIZE.desktop;
+}
 
 export class SessionStore {
   constructor(dataDir) {
@@ -243,6 +255,8 @@ export class SessionStore {
     const current = await this.get(id);
     const frames = Array.isArray(current.frames) ? current.frames.filter((f) => f.id !== frameId) : [];
     await this.update(id, { frames });
+    // Bila tidak ada frame tersisa, hapus thumbnail cache (sudah tidak relevan).
+    if (frames.length === 0) await this.removeThumbnail(id).catch(() => {});
     return frames;
   }
 
@@ -363,6 +377,42 @@ export class SessionStore {
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, buffer);
     return { name: String(name || `image${extension}`).slice(0, 120), type, path };
+  }
+
+  /** Lokasi file thumbnail cache (di luar workspace/ supaya tidak ikut export/listFiles). */
+  thumbPath(id) {
+    this.assertId(id);
+    return join(this.sessionDir(id), "thumb.png");
+  }
+
+  /** Baca thumbnail cache. Return { buffer, mtimeMs } atau null bila belum ada. */
+  async readThumbnail(id) {
+    const path = this.thumbPath(id);
+    try {
+      const info = await stat(path);
+      if (!info.isFile()) return null;
+      const buffer = await readFile(path);
+      return { buffer, mtimeMs: info.mtimeMs };
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    }
+  }
+
+  /** Tulis (overwrite) thumbnail cache. */
+  async writeThumbnail(id, buffer) {
+    await this.get(id);
+    await mkdir(this.sessionDir(id), { recursive: true });
+    await writeFile(this.thumbPath(id), buffer);
+  }
+
+  /** Hapus thumbnail cache bila ada (best-effort). */
+  async removeThumbnail(id) {
+    try {
+      await rm(this.thumbPath(id), { force: true });
+    } catch {
+      // best-effort
+    }
   }
 
   async checkpointCount(id) {

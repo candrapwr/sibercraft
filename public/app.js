@@ -1202,6 +1202,28 @@ function renderSessions() {
     previewBadge.className = "session-preview-badge";
     previewBadge.textContent = session.template === "dashboard" ? t("dashboard") : t("blankCanvas");
     preview.append(previewIcon, previewBadge);
+    // Thumbnail (best-effort): bila tersedia, tampil di atas ikon grid.
+    // Fallback bila 404 (belum digenerate / Chrome tidak ada) → biarkan ikon grid.
+    if (frameCount > 0) {
+      const thumb = document.createElement("img");
+      thumb.className = "session-thumb";
+      thumb.alt = "";
+      thumb.decoding = "async";
+      // Pakai opacity (bukan hidden) supaya <img> langsung trigger load
+      // dan tidak dianggap "below fold" oleh lazy-load heuristic.
+      thumb.style.opacity = "0";
+      thumb.src = `/api/sessions/${session.id}/thumbnail?v=${encodeURIComponent(session.updatedAt || "")}`;
+      thumb.addEventListener("load", () => {
+        if (thumb.naturalWidth > 0 && thumb.naturalHeight > 0) {
+          thumb.style.opacity = "1";
+          previewIcon.remove();
+        } else {
+          thumb.remove();
+        }
+      });
+      thumb.addEventListener("error", () => thumb.remove());
+      preview.append(thumb);
+    }
     const meta = document.createElement("div");
     meta.className = "session-meta";
     const copy = document.createElement("div");
