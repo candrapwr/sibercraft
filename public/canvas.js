@@ -149,7 +149,7 @@ function buildFrameEl(state) {
         <button type="button" data-act="close" data-tip="Close frame" data-tip-pos="bottom" aria-label="Close frame">×</button>
       </div>
     </div>
-    <iframe title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
+    <iframe title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"></iframe>
   `;
   applyFrameBox(el, state);
   // Wire HUD buttons (delegation handled at area level; here we set initial device active state).
