@@ -35,3 +35,27 @@ test("tool screenshot hanya tersedia ketika integrasi visual diaktifkan", async 
   });
   assert.equal(enabled.schemas.some((item) => item.function.name === "capture_webpage_screenshot"), true);
 });
+
+test("tool delete_frame tersedia ketika callback diaktifkan", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-frame-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const calls = [];
+  const tools = createFileTools(root, () => {}, {
+    onDeleteFrame: async (input) => {
+      calls.push(input);
+      return {
+        removed: { id: "frame-1", file: input.file },
+        frames: [],
+      };
+    },
+  });
+
+  assert.equal(tools.schemas.some((item) => item.function.name === "delete_frame"), true);
+
+  const deleted = await tools.execute("delete_frame", JSON.stringify({ file: "index.html" }));
+  assert.equal(deleted.mutated, true);
+  assert.deepEqual(calls, [{ frameId: undefined, file: "index.html" }]);
+  assert.deepEqual(deleted.frames, []);
+  assert.match(deleted.result, /Frame dihapus untuk index\.html/);
+});

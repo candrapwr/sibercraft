@@ -1,4 +1,5 @@
-import { canvasView, onFrameCreated, onPreviewUpdate, onDraftUpdate, onDraftClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js?v=37";
+import { canvasView, onFrameCreated, onFrameDeleted, onPreviewUpdate, onDraftUpdate, onDraftClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js";
+import { initTooltips, setTip } from "/tooltip.js";
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const MAX_IMAGE_BYTES = 1_000_000;
@@ -462,15 +463,19 @@ function applyStaticText() {
   $(".footer-contact span").textContent = t("contact");
   $("#backButton").title = t("backTitle");
   $("#backButton").setAttribute("aria-label", t("backAria"));
+  setTip($("#backButton"), t("backTitle"));
   $("#undoButton").title = t("undoTitle");
+  setTip($("#undoButton"), t("undoTitle"));
   $("#undoButton span").textContent = t("undo");
   $("#filesButton span").textContent = t("files");
   $("#exportButton span").textContent = t("export");
   $("#deleteButton").title = t("deleteTitle");
+  setTip($("#deleteButton"), t("deleteTitle"));
   $("#deleteButton").setAttribute("aria-label", t("deleteAria"));
   ui.chatMessages.setAttribute("aria-label", t("chatHistory"));
   ui.promptInput.placeholder = t("promptPlaceholder");
   $("#imageButton").title = t("addImages");
+  setTip($("#imageButton"), t("addImages"));
   $("#imageButton").setAttribute("aria-label", t("addImages"));
   $(".prompt-footer > span").innerHTML = `<kbd>Enter</kbd> ${t("enterSend")}`;
   $("#sendButton").setAttribute("aria-label", t("sendPrompt"));
@@ -480,19 +485,22 @@ function applyStaticText() {
   desktop.title = desktop.setAttribute("aria-label", t("desktop")) || t("desktop");
   tablet.title = tablet.setAttribute("aria-label", t("tablet")) || t("tablet");
   mobile.title = mobile.setAttribute("aria-label", t("mobile")) || t("mobile");
+  setTip(desktop, t("desktop")); setTip(tablet, t("tablet")); setTip(mobile, t("mobile"));
   $("span", desktop).textContent = t("desktop");
   $("#refreshButton").title = t("refreshPreview");
+  setTip($("#refreshButton"), t("refreshPreview"));
   $("#openPreviewButton").title = t("openInNewTab");
+  setTip($("#openPreviewButton"), t("openInNewTab"));
   // Canvas view static text.
   const cvBack = $("#cvBackButton");
-  if (cvBack) { cvBack.title = t("backToProject"); cvBack.setAttribute("aria-label", t("backToProject")); }
-  for (const id of ["cvZoomIn", "cvCtrlZoomIn"]) { const el = $("#" + id); if (el) { el.title = t("zoomIn"); el.setAttribute("aria-label", t("zoomIn")); } }
-  for (const id of ["cvZoomOut", "cvCtrlZoomOut"]) { const el = $("#" + id); if (el) { el.title = t("zoomOut"); el.setAttribute("aria-label", t("zoomOut")); } }
-  for (const id of ["cvZoomFit", "cvCtrlZoomFit"]) { const el = $("#" + id); if (el) { el.title = t("fitAllFrames"); el.setAttribute("aria-label", t("fitAllFrames")); } }
+  if (cvBack) { cvBack.title = t("backToProject"); cvBack.setAttribute("aria-label", t("backToProject")); setTip(cvBack, t("backToProject")); }
+  for (const id of ["cvZoomIn", "cvCtrlZoomIn"]) { const el = $("#" + id); if (el) { el.title = t("zoomIn"); el.setAttribute("aria-label", t("zoomIn")); setTip(el, t("zoomIn")); } }
+  for (const id of ["cvZoomOut", "cvCtrlZoomOut"]) { const el = $("#" + id); if (el) { el.title = t("zoomOut"); el.setAttribute("aria-label", t("zoomOut")); setTip(el, t("zoomOut")); } }
+  for (const id of ["cvZoomFit", "cvCtrlZoomFit"]) { const el = $("#" + id); if (el) { el.title = t("fitAllFrames"); el.setAttribute("aria-label", t("fitAllFrames")); setTip(el, t("fitAllFrames")); } }
   const dockToggle = $("#chatDockToggle");
-  if (dockToggle) { dockToggle.title = t("collapseChat"); dockToggle.setAttribute("aria-label", t("collapseChat")); }
+  if (dockToggle) { dockToggle.title = t("collapseChat"); dockToggle.setAttribute("aria-label", t("collapseChat")); setTip(dockToggle, t("collapseChat")); }
   const cvExportAll = $("#cvExportAllButton");
-  if (cvExportAll) { cvExportAll.title = t("exportAll"); const sp = $("span", cvExportAll); if (sp) sp.textContent = t("export"); }
+  if (cvExportAll) { cvExportAll.title = t("exportAll"); setTip(cvExportAll, t("exportAll")); const sp = $("span", cvExportAll); if (sp) sp.textContent = t("export"); }
   const emptyTitle = $(".canvas-empty-hint b");
   const emptyBody = $(".canvas-empty-hint span");
   if (emptyTitle) emptyTitle.textContent = t("canvasEmptyTitle");
@@ -1035,6 +1043,7 @@ function bindEvents() {
   window.addEventListener("pointermove", resizePanel);
   window.addEventListener("pointerup", endPanelResize);
   canvasView.init();
+  initTooltips();
   $("#previewStage").addEventListener("click", (event) => {
     if (window.innerWidth <= 680 && event.target === $("#previewStage")) ui.workspaceView.classList.remove("preview-mobile");
   });
@@ -1754,6 +1763,8 @@ async function sendPrompt(event) {
         onDraftClear(eventData.path);
       } else if (eventData.type === "frame_created") {
         onFrameCreated(eventData.frame);
+      } else if (eventData.type === "frame_deleted") {
+        onFrameDeleted(eventData.frameId);
       } else if (eventData.type === "done") {
         flushBufferedContent();
         if (!sawAssistantOutput && eventData.message) {

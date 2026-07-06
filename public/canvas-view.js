@@ -4,7 +4,7 @@
 // - Initializes frames from session.frames, listens for `frame_created` events
 //   from the chat stream, and persists frame position changes to the server.
 
-import { canvas } from "/canvas.js?v=37";
+import { canvas } from "/canvas.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -212,6 +212,14 @@ export function onFrameCreated(frame) {
     updateEmptyHint();
   }, 0);
   persistFrame({ action: "update", id: frame.id, x: full.x, y: full.y, device: full.device });
+}
+
+/** Called by the chat stream dispatcher when a `frame_deleted` event arrives. */
+export function onFrameDeleted(frameId) {
+  if (!inCanvas || !frameId) return;
+  canvas.removeFrame(frameId);
+  canvas._internal.zoomToFit();
+  updateEmptyHint();
 }
 
 /** Called when AI writes a file — reload matching frames. */

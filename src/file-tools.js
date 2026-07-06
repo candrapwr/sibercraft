@@ -126,6 +126,42 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
         true,
       ),
     ] : []),
+    ...(options.onDeleteFrame ? [
+      tool(
+        "delete_frame",
+        "Remove a preview frame from the canvas without deleting its HTML file. Use this when the user asks to remove/hide/delete a frame. Prefer `frame_id` when known; otherwise pass the HTML `file` shown by the frame.",
+        {
+          type: "object",
+          properties: {
+            frame_id: {
+              type: "string",
+              description: "ID of the frame to remove",
+            },
+            file: {
+              type: "string",
+              description: "Relative path of the HTML file whose frame should be removed (e.g. index.html)",
+            },
+          },
+          additionalProperties: false,
+        },
+        async ({ frame_id, file }) => {
+          const cleanFrameId = String(frame_id || "").trim();
+          const cleanFile = String(file || "").replace(/\\/g, "/").replace(/^\.\//, "").trim();
+          if (!cleanFrameId && !cleanFile) {
+            return { result: "Error: isi frame_id atau file untuk menghapus frame" };
+          }
+          const output = await options.onDeleteFrame({
+            frameId: cleanFrameId || undefined,
+            file: cleanFile || undefined,
+          });
+          return {
+            result: `Frame dihapus${output?.removed?.file ? ` untuk ${output.removed.file}` : ""}.`,
+            frames: output?.frames,
+          };
+        },
+        true,
+      ),
+    ] : []),
     ...(options.webScreenshot?.enabled ? [
       tool(
         "capture_webpage_screenshot",
@@ -176,6 +212,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
             mutated: selected.mutates,
             artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
             ...(output.frame ? { frame: output.frame } : {}),
+            ...(Array.isArray(output.frames) ? { frames: output.frames } : {}),
           };
         }
         return { result: String(output).slice(0, 400_000), mutated: selected.mutates, artifacts: [] };

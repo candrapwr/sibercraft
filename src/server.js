@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { config } from "./config.js";
@@ -61,7 +62,7 @@ const server = createServer(async (request, response) => {
       await handleThumbLayout(request, response, url);
       return;
     }
-    await servePublic(response, url.pathname);
+    await servePublic(request, response, url.pathname + url.search);
   } catch (error) {
     if (response.headersSent) {
       response.end();
@@ -703,20 +704,66 @@ function removePreviewDraft(id, path) {
   if (!drafts.size) previewDrafts.delete(id);
 }
 
-async function servePublic(response, pathname) {
-  const requested = pathname === "/" ? "index.html" : pathname.slice(1);
+// Auto cache-busting: a single asset version ID is generated when the server
+// starts, and injected into every static asset reference (href/src/from) at
+// serve time. Files with `?v=` are served as immutable (cached a year). When
+// you restart the server, a new ID is generated → all URLs change → browsers
+// refetch every asset automatically. No manual ?v=N bumping in HTML/JS.
+const ASSET_VERSION_ID = randomBytes(6).toString("base64url");
+
+// Matches absolute asset references inside HTML/JS: href="/x", src="/x",
+// from "/x". Captures the bare path (no query). Only rewrites known public
+// asset extensions so we never touch arbitrary URLs.
+const ASSET_REF_RE = /((?:^|[\s"'(])(?:href|src|from)\s*=\s*["']|from\s*["'])(\/[A-Za-z0-9._\-\/]+?)(["'])/g;
+
+function injectAssetVersions(content) {
+  return content.replace(ASSET_REF_RE, (full, prefix, path, quote) => {
+    if (path.includes("?") || path.includes("#")) return full; // already versioned
+    if (!/\.(html?|css|js|mjs|json|svg|png|jpg|jpeg|gif|webp|ico|woff2?)$/i.test(path)) return full;
+    return `${prefix}${path}?v=${ASSET_VERSION_ID}${quote}`;
+  });
+}
+
+async function servePublic(request, response, pathname) {
+  // Strip ?v=<id> query — used only for cache-busting; the file is the same.
+  // Presence of ?v= lets us serve the asset immutably.
+  const urlObj = new URL(pathname, "http://localhost");
+  const cleanPath = urlObj.pathname;
+  const hasVersionQuery = urlObj.searchParams.has("v");
+  const requested = cleanPath === "/" ? "index.html" : cleanPath.slice(1);
   let fullPath;
+  let info;
   try {
     fullPath = await resolveWithin(publicDir, requested);
-    const info = await stat(fullPath);
+    info = await stat(fullPath);
     if (!info.isFile()) throw new Error("not-file");
   } catch {
     fullPath = join(publicDir, "index.html");
+    info = await stat(fullPath);
   }
-  const content = await readFile(fullPath);
+  let content = await readFile(fullPath);
+  const ext = extname(fullPath).toLowerCase();
+  const isHtml = ext === ".html";
+  // Inject ?v=<id> into HTML and JS module references so the browser caches
+  // each asset immutably and refetches automatically when the server restarts
+  // (which generates a new ASSET_VERSION_ID).
+  if (isHtml || ext === ".js" || ext === ".mjs") {
+    content = Buffer.from(injectAssetVersions(content.toString("utf8")), "utf8");
+  }
+  // Cache strategy:
+  //  - Asset with ?v=<id>: immutable, 1 year (ID changes on restart → refetch).
+  //  - HTML (entry point): NEVER cache. HTML is the only place that carries
+  //    the asset ?v= links, so it must always be fresh.
+  //  - Other files without ?v= (rare direct access): revalidate via ETag.
+  const etag = `"${info.size.toString(16)}-${info.mtimeMs.toString(16)}"`;
+  let cacheControl;
+  if (hasVersionQuery) cacheControl = "public, max-age=31536000, immutable";
+  else if (isHtml) cacheControl = "no-store";
+  else cacheControl = "no-cache, must-revalidate";
   response.writeHead(200, {
     "Content-Type": mimeType(fullPath),
-    "Cache-Control": "no-store",
+    "Cache-Control": cacheControl,
+    "ETag": etag,
     "X-Content-Type-Options": "nosniff",
   });
   response.end(content);

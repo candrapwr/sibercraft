@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=1180">
   <meta name="color-scheme" content="dark light">
   <title>SiberCraft — AI Mockup Workspace</title>
-  <link rel="stylesheet" href="/styles.css?n=37">
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <section id="authView" class="auth-view" hidden>
@@ -318,25 +318,25 @@
   <!-- Canvas workspace: full-screen infinite canvas with multiple AI-managed frames -->
   <section id="canvasView" class="canvas-view" hidden>
     <header class="canvas-view-header">
-      <button id="cvBackButton" class="icon-button" title="Back to project" aria-label="Back">←</button>
+      <button id="cvBackButton" class="icon-button" data-tip="Back to project" aria-label="Back">←</button>
       <span class="brand-mark">S</span>
       <div class="cv-title" id="cvTitle">Canvas</div>
       <span class="cv-spacer"></span>
-      <span id="cvUsageBadge" class="topbar-tokens" hidden title="Token usage">
+      <span id="cvUsageBadge" class="topbar-tokens" hidden data-tip="Token usage" data-tip-pos="bottom">
         <span id="cvUsagePrompt" class="token-prompt">0</span>
         <span class="token-sep">/</span>
         <span id="cvUsageCompletion" class="token-completion">0</span>
       </span>
       <span id="cvStatus" class="workspace-status"><i></i><span>Ready</span></span>
-      <button id="cvUndoButton" class="header-button" title="Undo the last prompt" disabled>↶ <span>Undo</span></button>
-      <button id="cvExportAllButton" class="header-button" title="Export all assets (ZIP)">🗜 <span>Export All</span></button>
-      <button id="cvZoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+      <button id="cvUndoButton" class="header-button" data-tip="Undo the last prompt" data-tip-pos="bottom" disabled>↶ <span>Undo</span></button>
+      <button id="cvExportAllButton" class="header-button" data-tip="Export all assets (ZIP)" data-tip-pos="bottom">🗜 <span>Export All</span></button>
+      <button id="cvZoomOut" data-tip="Zoom out" aria-label="Zoom out">−</button>
       <span id="cvZoomLabel" class="zoom-label">70%</span>
-      <button id="cvZoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-      <button id="cvZoomFit" title="Fit all frames" aria-label="Fit all frames" class="zoom-fit">⊡</button>
+      <button id="cvZoomIn" data-tip="Zoom in" aria-label="Zoom in">+</button>
+      <button id="cvZoomFit" data-tip="Fit all frames" aria-label="Fit all frames" class="zoom-fit">⊡</button>
     </header>
     <div id="canvasLayout" class="canvas-layout">
-      <button id="chatDockToggle" class="chat-dock-toggle" title="Collapse chat" aria-label="Toggle chat panel">‹</button>
+      <button id="chatDockToggle" class="chat-dock-toggle" data-tip="Collapse chat" data-tip-pos="right" aria-label="Toggle chat panel">‹</button>
       <div id="chatDock" class="chat-dock">
         <!-- .chat-panel node is moved here from #workspaceView at runtime -->
       </div>
@@ -393,6 +393,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/app.js?n=39"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

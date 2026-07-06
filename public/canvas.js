@@ -130,23 +130,23 @@ function buildFrameEl(state) {
     <div class="frame-drag-handle corner br" aria-hidden="true"></div>
     <div class="frame-label"></div>
     <div class="frame-devices">
-      <button type="button" data-device="desktop" title="Desktop" aria-label="Desktop">
+      <button type="button" data-device="desktop" data-tip="Desktop" data-tip-pos="left" aria-label="Desktop">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="11" rx="1.75"></rect><path d="M9 19h6"></path><path d="M12 16v3"></path></svg>
       </button>
-      <button type="button" data-device="tablet" title="Tablet" aria-label="Tablet">
+      <button type="button" data-device="tablet" data-tip="Tablet" data-tip-pos="left" aria-label="Tablet">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3.5" width="10" height="17" rx="2"></rect><path d="M11 17.5h2"></path></svg>
       </button>
-      <button type="button" data-device="mobile" title="Mobile" aria-label="Mobile">
+      <button type="button" data-device="mobile" data-tip="Mobile" data-tip-pos="left" aria-label="Mobile">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.25" y="2.75" width="7.5" height="18.5" rx="2"></rect><path d="M11 5h2"></path><circle cx="12" cy="18" r=".8" fill="currentColor" stroke="none"></circle></svg>
       </button>
     </div>
     <div class="frame-hud">
       <div class="hud-group hud-actions">
-        <button type="button" data-act="refresh" title="Refresh" aria-label="Refresh preview">↻</button>
-        <button type="button" data-act="open" title="Open in new tab" aria-label="Open in new tab">↗</button>
-        <button type="button" data-act="export" title="Export image" aria-label="Export image">🖼</button>
-        <button type="button" data-act="export-html" title="Export HTML" aria-label="Export HTML">⇩</button>
-        <button type="button" data-act="close" title="Close frame" aria-label="Close frame">×</button>
+        <button type="button" data-act="refresh" data-tip="Refresh" data-tip-pos="bottom" aria-label="Refresh preview">↻</button>
+        <button type="button" data-act="open" data-tip="Open in new tab" data-tip-pos="bottom" aria-label="Open in new tab">↗</button>
+        <button type="button" data-act="export" data-tip="Export image" data-tip-pos="bottom" aria-label="Export image">🖼</button>
+        <button type="button" data-act="export-html" data-tip="Export HTML" data-tip-pos="bottom" aria-label="Export HTML">⇩</button>
+        <button type="button" data-act="close" data-tip="Close frame" data-tip-pos="bottom" aria-label="Close frame">×</button>
       </div>
     </div>
     <iframe title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>

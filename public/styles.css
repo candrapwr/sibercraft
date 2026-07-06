@@ -20,6 +20,37 @@ body.resizing-panel { cursor: col-resize; user-select: none; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+
+/* ── Custom tooltip (.sc-tip) ─────────────────────────────────────
+   Rendered at <body> level (public/tooltip.js) so it ignores parent
+   transforms — important for canvas HUD buttons that are counter-scaled
+   by --hud-scale. Faster (150ms) and styled, vs the ~500ms native title. */
+.sc-tip {
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  max-width: 240px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(9, 14, 12, .94);
+  border: 1px solid rgba(208, 220, 212, .14);
+  color: #dce6df;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .4);
+  opacity: 0;
+  transform: translateY(2px) scale(.96);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.sc-tip.show { opacity: 1; transform: translateY(0) scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .sc-tip { transition: opacity .1s; transform: none; }
+}
 [hidden] { display: none !important; }
 
 .landing-nav { position: sticky; z-index: 10; top: 0; height: 68px; border-bottom: 1px solid rgba(208,220,212,.09); background: rgba(8,13,11,.78); backdrop-filter: blur(20px); }
