@@ -59,6 +59,7 @@ function init() {
   $("#cvUndoButton")?.addEventListener("click", undoFromCanvas);
   $("#cvBackButton")?.addEventListener("click", leave);
   $("#cvExportAllButton")?.addEventListener("click", exportAll);
+  $("#cvThumbButton")?.addEventListener("click", regenerateThumbnail);
 
   // Export hooks used by canvas.js HUD.
   window.__sibercraftExportFrame = exportFrame;
@@ -394,6 +395,22 @@ async function exportAll() {
     URL.revokeObjectURL(url);
   } catch (e) {
     alert(e.message);
+  } finally {
+    if (btn && origText != null) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+/** Regenerate thumbnail for the current session — manual trigger. */
+async function regenerateThumbnail() {
+  if (!session) return;
+  const btn = document.getElementById("cvThumbButton");
+  let origText = null;
+  if (btn) { origText = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Generating…"; }
+  try {
+    const res = await fetch(`/api/sessions/${session.id}/regenerate-thumbnail`, { method: "POST" });
+    if (!res.ok) throw new Error("Regenerate thumbnail gagal");
+  } catch (e) {
+    alert(e.message || "Gagal memperbarui thumbnail");
   } finally {
     if (btn && origText != null) { btn.disabled = false; btn.textContent = origText; }
   }

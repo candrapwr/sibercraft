@@ -355,6 +355,12 @@ async function handleApi(request, response, url, user) {
     response.end(thumb.buffer);
     return;
   }
+  // Manual thumbnail regeneration (triggered from canvas header button).
+  if (method === "POST" && action === "regenerate-thumbnail") {
+    await store.getForEdit(id, access);
+    await generateThumbnailForSession(id);
+    return sendJson(response, 200, { ok: true });
+  }
   throw new HttpError(404, "Endpoint tidak ditemukan");
 }
 
