@@ -136,6 +136,7 @@
             </button>
             <div id="userMenuDropdown" class="user-menu-dropdown" hidden>
               <div class="user-menu-email" id="userMenuEmail"></div>
+              <button id="apiSettingsButton" class="user-menu-item" type="button">⚿ API settings</button>
               <button id="adminPanelButton" class="user-menu-item" type="button" hidden>⚙ Admin panel</button>
               <button id="logoutButton" class="user-menu-item" type="button">Log out</button>
             </div>
@@ -383,6 +384,76 @@
         </button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="apiSettingsDialog" class="dialog api-settings-dialog">
+    <form id="apiSettingsForm" method="dialog">
+      <div class="dialog-head">
+        <div><p class="kicker">ACCOUNT</p><h2>API settings</h2></div>
+        <button type="button" class="icon-button" data-close-dialog aria-label="Close">×</button>
+      </div>
+      <p class="api-settings-description">Use your own AI provider key. Prompts are sent directly to your provider when this is enabled.</p>
+
+      <div class="api-security-note" role="note">
+        <span class="api-security-icon" aria-hidden="true">🔒</span>
+        <div class="api-security-text">
+          <strong>Your API key is encrypted and kept secret</strong>
+          <small>Keys are encrypted (AES-256) before they reach the database, are never logged, and never returned to the browser — not even to you. For your safety, a saved key cannot be viewed again; it can only be replaced or removed.</small>
+        </div>
+      </div>
+
+      <label class="api-toggle-row">
+        <input id="apiSettingsEnabled" name="enabled" type="checkbox">
+        <span class="api-toggle-text"><strong>Use my own provider</strong><small data-api-source>When enabled, prompts are billed to your key instead of the server default.</small></span>
+      </label>
+
+      <fieldset class="api-provider-group">
+        <legend>Primary <small>text/code generation</small></legend>
+        <label class="field"><span>API key</span>
+          <input id="apiSettingsPrimaryKey" name="primaryKey" type="password" autocomplete="off" placeholder="Leave blank to keep the stored key">
+          <span class="api-key-hint" data-api-key-hint hidden></span>
+        </label>
+        <div class="api-field-row">
+          <label class="field"><span>Endpoint</span>
+            <input id="apiSettingsPrimaryEndpoint" name="primaryEndpoint" type="url" autocomplete="off" placeholder="https://api.example.com/v1">
+          </label>
+          <label class="field"><span>Model</span>
+            <input id="apiSettingsPrimaryModel" name="primaryModel" type="text" autocomplete="off" placeholder="model-name">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="api-provider-group">
+        <legend>Multimodal <small>image input — optional</small></legend>
+        <label class="field"><span>API key</span>
+          <input id="apiSettingsMultimodalKey" name="multimodalKey" type="password" autocomplete="off" placeholder="Leave blank to keep the stored key">
+          <span class="api-key-hint" data-api-key-hint hidden></span>
+        </label>
+        <div class="api-field-row">
+          <label class="field"><span>Endpoint</span>
+            <input id="apiSettingsMultimodalEndpoint" name="multimodalEndpoint" type="url" autocomplete="off" placeholder="https://api.example.com/v1">
+          </label>
+          <label class="field"><span>Model</span>
+            <input id="apiSettingsMultimodalModel" name="multimodalModel" type="text" autocomplete="off" placeholder="model-name">
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="api-usage-panel" data-api-usage hidden>
+        <div class="api-usage-head"><span class="kicker">YOUR CONSUMPTION</span><small data-api-usage-updated></small></div>
+        <div class="api-usage-stats">
+          <div class="api-usage-stat"><b data-api-usage-prompt>0</b><small>Prompt tokens</small></div>
+          <div class="api-usage-stat"><b data-api-usage-completion>0</b><small>Completion tokens</small></div>
+          <div class="api-usage-stat"><b data-api-usage-turns>0</b><small>Turns</small></div>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <div id="apiSettingsNotice" class="api-settings-notice" role="status" hidden></div>
+        <button type="button" class="button button-ghost" data-close-dialog>Cancel</button>
+        <button type="submit" class="button button-dark">Save settings <span>→</span></button>
+      </div>
+    </form>
   </dialog>
 
   <div id="imageLightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-label="Image preview" hidden>

@@ -14,6 +14,7 @@ import { UserStore } from "./auth-store.js";
 import {
   resolveUser,
   resolveOwner,
+  requireUser,
   requireAdmin,
   isAdmin,
   isSecureRequest,
@@ -31,11 +32,22 @@ import {
 } from "./session-cookie.js";
 import { sendMail } from "./mail.js";
 import { buildVerificationEmail } from "./verification-mail.js";
+import { deriveKey } from "./crypto-secret.js";
+import { ProviderStore } from "./provider-store.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
 const db = await initDb(config.dataDir);
 const userStore = new UserStore(db);
+// AES-GCM key for encrypting user-supplied API keys at rest. Derived from the
+// same SESSION_SECRET that signs session cookies, so its persistence caveats
+// are identical: if SESSION_SECRET is unset (ephemeral dev secret), stored API
+// keys become undecryptable after a restart (treated gracefully as "missing").
+const cryptoKey = await deriveKey(config.auth.secret);
+const providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
+if (!process.env.SESSION_SECRET?.trim()) {
+  console.warn("SESSION_SECRET belum diatur: API key pengguna tidak akan survive restart server.");
+}
 const activeRuns = new Map();
 const previewDrafts = new Map();
 const MAX_IMAGE_BYTES = 1_000_000;
@@ -80,6 +92,11 @@ async function handleApi(request, response, url, user) {
   // --- Auth routes (publik, tidak butuh login) ---
   if (url.pathname.startsWith("/api/auth/")) {
     return handleAuth(request, response, url, user);
+  }
+
+  // --- Account-scoped routes (wajib login) ---
+  if (url.pathname.startsWith("/api/me/")) {
+    return handleMe(request, response, url, user);
   }
 
   if (method === "GET" && url.pathname === "/api/config") {
@@ -480,6 +497,84 @@ async function handleAuth(request, response, url, user) {
   throw new HttpError(404, "Endpoint tidak ditemukan");
 }
 
+/** Handler untuk /api/me/* (provider config + token usage). Wajib login. */
+async function handleMe(request, response, url, user) {
+  requireUser(user);
+  const { method } = request;
+  const { pathname } = url;
+
+  if (method === "GET" && pathname === "/api/me/provider") {
+    return sendJson(response, 200, await providerStore.getRedacted(user.id));
+  }
+  if (method === "PUT" && pathname === "/api/me/provider") {
+    const body = await readJson(request);
+    return sendJson(response, 200, await saveProviderConfig(user.id, body));
+  }
+  if (method === "DELETE" && pathname === "/api/me/provider") {
+    await providerStore.clear(user.id);
+    return sendJson(response, 200, { ok: true });
+  }
+  if (method === "GET" && pathname === "/api/me/usage") {
+    return sendJson(response, 200, providerStore.getUsage(user.id));
+  }
+  throw new HttpError(404, "Endpoint tidak ditemukan");
+}
+
+/**
+ * Validasi dan simpan konfigurasi provider milik user.
+ * Field yang divalidasi: endpoint (http/https URL), model (non-empty, ≤120),
+ * apiKey (≤500). apiKey kosong → key lama dipertahankan (keep-existing).
+ */
+async function saveProviderConfig(userId, body) {
+  const payload = {
+    enabled: Boolean(body?.enabled),
+    primary: validateProviderPayload(body?.primary),
+    multimodal: validateProviderPayload(body?.multimodal),
+  };
+  return providerStore.save(userId, payload);
+}
+
+function validateProviderPayload(value) {
+  if (!value || typeof value !== "object") return { apiKey: "", baseUrl: "", model: "" };
+  const apiKey = value.apiKey == null ? "" : String(value.apiKey);
+  if (apiKey.length > 500) throw new HttpError(400, "API key terlalu panjang (maksimal 500 karakter)");
+  const baseUrl = String(value.baseUrl || "").trim();
+  if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+    throw new HttpError(400, "Endpoint harus berupa URL http atau https");
+  }
+  if (baseUrl.length > 500) throw new HttpError(400, "Endpoint terlalu panjang");
+  const model = String(value.model || "").trim();
+  if (model.length > 120) throw new HttpError(400, "Model terlalu panjang (maksimal 120 karakter)");
+  return { apiKey, baseUrl, model };
+}
+
+/**
+ * Bangun agent config dengan override provider pribadi bila user mengaktifkannya.
+ * Mengembalikan { config, providerSource }:
+ *   - providerSource "user"  → primary pakai key user (usage akan di-track).
+ *   - providerSource "server" → pakai config.deepseek default.
+ * Multimodal: bila user set multimodal sendiri, override; selain itu fallback default.
+ */
+async function resolveProviderConfig(userId, baseConfig) {
+  const provider = await providerStore.get(userId);
+  if (!provider.enabled || !provider.primary.apiKey) {
+    return { config: baseConfig, providerSource: "server" };
+  }
+  const merged = { ...baseConfig, _providerSource: "user" };
+  merged.apiKey = provider.primary.apiKey;
+  if (provider.primary.baseUrl) merged.baseUrl = provider.primary.baseUrl.replace(/\/$/, "");
+  if (provider.primary.model) merged.model = provider.primary.model;
+  // Multimodal override hanya bila user punya key multimodal sendiri.
+  if (provider.multimodal.apiKey) {
+    merged.multimodal = {
+      apiKey: provider.multimodal.apiKey,
+      baseUrl: (provider.multimodal.baseUrl || merged.multimodal.baseUrl).replace(/\/$/, ""),
+      model: provider.multimodal.model || merged.multimodal.model,
+    };
+  }
+  return { config: merged, providerSource: "user" };
+}
+
 async function sendVerificationEmail({ to, verifyUrl }) {
   if (!config.mail.host || !config.mail.username || !config.mail.fromAddress) {
     throw new Error("Konfigurasi mail belum lengkap");
@@ -568,12 +663,17 @@ async function streamChat(request, response, id, access) {
 
   let result = null;
   try {
+    // Override default provider with the user's BYOK config if they enabled one.
+    // Only applies to logged-in users; anon always uses the server default.
+    const { config: agentConfig } = access.ownerId && !access.ownerId.startsWith("anon-")
+      ? await resolveProviderConfig(access.ownerId, config.deepseek)
+      : { config: config.deepseek };
     result = await runAgent({
       session,
       store,
       prompt,
       images,
-      config: config.deepseek,
+      config: agentConfig,
       webScreenshot: config.webScreenshot,
       signal: controller.signal,
       emit,
@@ -588,6 +688,12 @@ async function streamChat(request, response, id, access) {
     activeRuns.delete(id);
     previewDrafts.delete(id);
     response.end();
+    // Attribute token consumption to the user ONLY when their own private
+    // provider key was used for this turn (operator-default usage is the
+    // server's cost and intentionally not billed here).
+    if (result?.providerSource === "user" && result.promptTokens + result.completionTokens > 0) {
+      try { providerStore.incrementUsage(access.ownerId, result.promptTokens, result.completionTokens); } catch {}
+    }
     // Bila AI mengubah/membuat file, regenerate thumbnail di background.
     // Fire-and-forget (best-effort): skip diam-diam bila Chrome tidak ada.
     if (result?.mutated) {

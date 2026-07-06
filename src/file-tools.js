@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureWebpageScreenshot } from "./web-screenshot.js";
@@ -94,6 +94,35 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       await copyFile(sourcePath, destinationPath);
       await onMutation(destination);
       return `Berhasil menyalin ${source} ke ${destination}`;
+    }, true),
+    tool("delete_file", "Delete a file or directory from the workspace. Use this when the user asks to remove, clean up, or delete a file. By default deletes a single file; set recursive=true to delete a directory and everything inside it. The path must already exist.", {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Relative path of the file or directory to delete",
+        },
+        recursive: {
+          type: "boolean",
+          description: "If true and the path is a directory, delete it and all of its contents. Ignored for files. Default false.",
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    }, async ({ path, recursive = false }) => {
+      const fullPath = await resolveWithin(workspaceDir, path);
+      const info = await stat(fullPath);
+      const isDirectory = info.isDirectory();
+      // Guard: never allow deleting a directory non-recursively — it would fail
+      // and the error from rm is cryptic. Force the caller to opt in explicitly.
+      if (isDirectory && !recursive) {
+        throw new Error(`Path ${path} adalah direktori. Set recursive=true untuk menghapus direktori beserta isinya.`);
+      }
+      await rm(fullPath, { recursive: isDirectory ? Boolean(recursive) : false, force: false });
+      await onMutation(path);
+      return isDirectory
+        ? `Berhasil menghapus direktori ${path} beserta isinya`
+        : `Berhasil menghapus ${path}`;
     }, true),
     ...(options.onCreateFrame ? [
       tool(

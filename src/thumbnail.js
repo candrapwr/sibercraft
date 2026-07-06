@@ -81,6 +81,7 @@ export function buildLayoutHtml({ id, frames, port }) {
 
   // Background uses the same dark grid as the canvas (.session-preview /
   // .canvas-area) so the thumbnail matches the in-app look.
+  const iframeCount = frames.length;
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -108,6 +109,22 @@ export function buildLayoutHtml({ id, frames, port }) {
 </head>
 <body>
 ${iframeNodes}
+<script>
+(function(){
+  var expected = ${iframeCount};
+  var loaded = 0;
+  function check(){ if(++loaded >= expected) document.title = 'thumb-ready'; }
+  var frames = document.querySelectorAll('iframe');
+  for(var i=0;i<frames.length;i++){
+    frames[i].addEventListener('load', check, {once:true});
+    frames[i].addEventListener('error', check, {once:true});
+  }
+  // Fallback: ready anyway after 12s so capture never hangs forever.
+  setTimeout(function(){ document.title = 'thumb-ready'; }, 12000);
+  // If no iframes at all, signal immediately.
+  if(frames.length === 0) document.title = 'thumb-ready';
+})();
+</script>
 </body>
 </html>`;
   return { html, width: pageWidth, height: Math.ceil(box.height + PADDING * 2) };

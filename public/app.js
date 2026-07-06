@@ -140,6 +140,32 @@ const translations = {
     verifyInvalidBody: "This verification link is invalid, already used, or expired. Please request a new one.",
     exportHtmlFailed: "HTML export failed",
     exportHtmlSuccess: "Single HTML exported",
+    apiSourcePrivate: "Active — prompts are sent to your own provider key.",
+    apiSourceServer: "When enabled, prompts are billed to your key instead of the server default.",
+    apiSettingsSaved: "API settings saved",
+    apiKeyStoredHidden: "Stored encrypted — hidden for security. Leave blank to keep, or type a new key to replace it.",
+    apiSettingsMenu: "API settings",
+    apiSettingsKicker: "ACCOUNT",
+    apiSettingsTitle: "API settings",
+    apiSettingsDesc: "Use your own AI provider key. Prompts are sent directly to your provider when this is enabled.",
+    apiSecurityTitle: "Your API key is encrypted and kept secret",
+    apiSecurityBody: "Keys are encrypted (AES-256) before they reach the database, are never logged, and never returned to the browser — not even to you. For your safety, a saved key cannot be viewed again; it can only be replaced or removed.",
+    apiUseOwnProvider: "Use my own provider",
+    apiPrimaryLegend: "Primary",
+    apiPrimaryLegendHint: "text/code generation",
+    apiMultimodalLegend: "Multimodal",
+    apiMultimodalLegendHint: "image input — optional",
+    apiKeyLabel: "API key",
+    apiEndpointLabel: "Endpoint",
+    apiModelLabel: "Model",
+    apiKeyPlaceholder: "Paste your API key here",
+    apiEndpointPlaceholder: "https://api.example.com/v1",
+    apiModelPlaceholder: "model-name",
+    apiConsumptionKicker: "YOUR CONSUMPTION",
+    apiPromptTokens: "Prompt tokens",
+    apiCompletionTokens: "Completion tokens",
+    apiTurns: "Turns",
+    apiSaveSettings: "Save settings",
     screenshotProcessing: "Screenshot is being processed",
     exportImageFailed: "Image export failed",
     exportImageSuccess: "Full-page image exported",
@@ -292,6 +318,32 @@ const translations = {
     verifyInvalidBody: "Tautan verifikasi ini tidak valid, sudah dipakai, atau kadaluarsa. Silakan minta yang baru.",
     exportHtmlFailed: "Export HTML gagal",
     exportHtmlSuccess: "Single HTML berhasil diexport",
+    apiSourcePrivate: "Aktif — prompt dikirim ke API key provider Anda sendiri.",
+    apiSourceServer: "Saat diaktifkan, prompt ditagih ke key Anda, bukan default server.",
+    apiSettingsSaved: "Pengaturan API tersimpan",
+    apiKeyStoredHidden: "Tersimpan terenkripsi — disembunyikan demi keamanan. Kosongkan untuk mempertahankan, atau ketik key baru untuk mengganti.",
+    apiSettingsMenu: "Pengaturan API",
+    apiSettingsKicker: "AKUN",
+    apiSettingsTitle: "Pengaturan API",
+    apiSettingsDesc: "Gunakan API key provider AI Anda sendiri. Saat diaktifkan, prompt dikirim langsung ke provider Anda.",
+    apiSecurityTitle: "API key Anda dienkripsi dan dijaga rahasia",
+    apiSecurityBody: "Key dienkripsi (AES-256) sebelum masuk ke database, tidak pernah dicatat di log, dan tidak pernah dikembalikan ke browser — bahkan kepada Anda sendiri. Demi keamanan, key yang tersimpan tidak dapat dilihat ulang; hanya bisa diganti atau dihapus.",
+    apiUseOwnProvider: "Gunakan provider saya sendiri",
+    apiPrimaryLegend: "Primary",
+    apiPrimaryLegendHint: "teks/generasi kode",
+    apiMultimodalLegend: "Multimodal",
+    apiMultimodalLegendHint: "input gambar — opsional",
+    apiKeyLabel: "API key",
+    apiEndpointLabel: "Endpoint",
+    apiModelLabel: "Model",
+    apiKeyPlaceholder: "Tempel API key Anda di sini",
+    apiEndpointPlaceholder: "https://api.contoh.com/v1",
+    apiModelPlaceholder: "nama-model",
+    apiConsumptionKicker: "KONSUMSI ANDA",
+    apiPromptTokens: "Token prompt",
+    apiCompletionTokens: "Token completion",
+    apiTurns: "Turn",
+    apiSaveSettings: "Simpan pengaturan",
     screenshotProcessing: "Screenshot sedang diproses",
     exportImageFailed: "Export gambar gagal",
     exportImageSuccess: "Full-page image berhasil diexport",
@@ -372,6 +424,19 @@ const ui = {
   userMenuName: $("#userMenuName"), userMenuEmail: $("#userMenuEmail"),
   userMenuAvatar: $("#userMenuAvatar"), userMenuRole: $("#userMenuRole"),
   userMenuTier: $("#userMenuTier"), logoutButton: $("#logoutButton"),
+  apiSettingsButton: $("#apiSettingsButton"),
+  apiSettingsDialog: $("#apiSettingsDialog"), apiSettingsForm: $("#apiSettingsForm"),
+  apiSettingsEnabled: $("#apiSettingsEnabled"),
+  apiSettingsPrimaryKey: $("#apiSettingsPrimaryKey"),
+  apiSettingsPrimaryEndpoint: $("#apiSettingsPrimaryEndpoint"),
+  apiSettingsPrimaryModel: $("#apiSettingsPrimaryModel"),
+  apiSettingsMultimodalKey: $("#apiSettingsMultimodalKey"),
+  apiSettingsMultimodalEndpoint: $("#apiSettingsMultimodalEndpoint"),
+  apiSettingsMultimodalModel: $("#apiSettingsMultimodalModel"),
+  apiUsagePanel: $("[data-api-usage]"), apiUsageSource: $("[data-api-source]"),
+  apiUsagePrompt: $("[data-api-usage-prompt]"), apiUsageCompletion: $("[data-api-usage-completion]"),
+  apiUsageTurns: $("[data-api-usage-turns]"), apiUsageUpdated: $("[data-api-usage-updated]"),
+  apiSettingsNotice: $("#apiSettingsNotice"),
   authActions: $("#authActions"), headerLoginButton: $("#headerLoginButton"),
   closeAuthButton: $("#closeAuthButton"),
   guestNotice: $("#guestNotice"), guestNoticeTitle: $("#guestNoticeTitle"),
@@ -525,8 +590,77 @@ function applyStaticText() {
   ui.imageLightbox.setAttribute("aria-label", t("imagePreview"));
   ui.closeImageLightbox.setAttribute("aria-label", t("closeImagePreview"));
   ui.closeAuthButton.setAttribute("aria-label", t("close"));
+  applyApiSettingsStaticText();
   renderAiStatus();
   applySessionHeading();
+}
+
+/* Translate the API settings dialog's static text. Called from applyStaticText
+   so the dialog follows the active language (EN/ID). Dynamic field values
+   (key/endpoint/model/usage) are populated separately in openApiSettingsDialog. */
+function applyApiSettingsStaticText() {
+  if (!ui.apiSettingsDialog) return;
+  const dialog = ui.apiSettingsDialog;
+  $(".kicker", dialog).textContent = t("apiSettingsKicker");
+  $(".dialog-head h2", dialog).textContent = t("apiSettingsTitle");
+  $(".api-settings-description", dialog).textContent = t("apiSettingsDesc");
+  $(".api-security-text strong", dialog).textContent = t("apiSecurityTitle");
+  $(".api-security-text small", dialog).textContent = t("apiSecurityBody");
+  $(".api-toggle-text strong", dialog).textContent = t("apiUseOwnProvider");
+  // Toggle subtext reflects the current source. We can only know which after
+  // the dialog is opened (server data); until then show the default hint.
+  // populateApiSettings() re-sets this with the correct text on open.
+  const primaryHasKey = ui.apiSettingsPrimaryKey?.placeholder?.includes("•");
+  $(".api-toggle-text small", dialog).textContent = primaryHasKey
+    ? t("apiSourcePrivate")
+    : t("apiSourceServer");
+  // Menu item label in the user dropdown.
+  if (ui.apiSettingsButton) ui.apiSettingsButton.textContent = `⚿ ${t("apiSettingsMenu")}`;
+  // Fieldset legends + hints.
+  const groups = $$(".api-provider-group", dialog);
+  if (groups[0]) {
+    $("legend", groups[0]).childNodes[0].textContent = ` ${t("apiPrimaryLegend")} `;
+    const hint = $("legend small", groups[0]);
+    if (hint) hint.textContent = t("apiPrimaryLegendHint");
+  }
+  if (groups[1]) {
+    $("legend", groups[1]).childNodes[0].textContent = ` ${t("apiMultimodalLegend")} `;
+    const hint = $("legend small", groups[1]);
+    if (hint) hint.textContent = t("apiMultimodalLegendHint");
+  }
+  // Field labels + placeholders (only for fields that aren't currently holding
+  // a "stored" key marker, which setApiKeyFieldState manages separately).
+  $$(".api-provider-group .field > span", dialog).forEach((label, index) => {
+    // Fields alternate: API key, Endpoint, Model (per group).
+    if (index % 3 === 0) label.textContent = t("apiKeyLabel");
+    else if (index % 3 === 1) label.textContent = t("apiEndpointLabel");
+    else label.textContent = t("apiModelLabel");
+  });
+  // Endpoints & models (skip key fields — their placeholder is dynamic).
+  setPlaceholderIfEmpty(ui.apiSettingsPrimaryEndpoint, t("apiEndpointPlaceholder"));
+  setPlaceholderIfEmpty(ui.apiSettingsPrimaryModel, t("apiModelPlaceholder"));
+  setPlaceholderIfEmpty(ui.apiSettingsMultimodalEndpoint, t("apiEndpointPlaceholder"));
+  setPlaceholderIfEmpty(ui.apiSettingsMultimodalModel, t("apiModelPlaceholder"));
+  // API-key field placeholders: keep the "stored" marker as-is; otherwise
+  // re-apply the localized empty placeholder.
+  for (const input of [ui.apiSettingsPrimaryKey, ui.apiSettingsMultimodalKey]) {
+    if (input && !input.placeholder.includes("•")) input.placeholder = t("apiKeyPlaceholder");
+  }
+  // Usage panel labels.
+  const usageKicker = $("[data-api-usage] .kicker");
+  if (usageKicker) usageKicker.textContent = t("apiConsumptionKicker");
+  const statLabels = $$("[data-api-usage] .api-usage-stat small");
+  if (statLabels[0]) statLabels[0].textContent = t("apiPromptTokens");
+  if (statLabels[1]) statLabels[1].textContent = t("apiCompletionTokens");
+  if (statLabels[2]) statLabels[2].textContent = t("apiTurns");
+  // Dialog action buttons.
+  const actions = $$(".dialog-actions button", dialog);
+  if (actions[0]) actions[0].textContent = t("cancel");
+  if (actions[1]) actions[1].childNodes[0].textContent = `${t("apiSaveSettings")} `;
+}
+
+function setPlaceholderIfEmpty(input, placeholder) {
+  if (input && !input.placeholder) input.placeholder = placeholder;
 }
 
 /* ===== Auth ===== */
@@ -719,6 +853,122 @@ async function handleLogout() {
   applyUser(null);
   location.hash = "";
   showAuthView("login");
+}
+
+// --- API settings (BYOK) -------------------------------------------------
+// Logged-in users can configure their own AI provider key + endpoint + model.
+// Keys are encrypted server-side; the API never returns plaintext, so the
+// key input is left blank on load (placeholder signals "stored").
+
+async function openApiSettingsDialog() {
+  if (!state.user) return;
+  // Reset inputs first so a slow network doesn't show stale data.
+  ui.apiSettingsForm.reset();
+  ui.apiUsagePanel.hidden = true;
+  showApiSettingsNotice(null);
+  ui.apiSettingsDialog.showModal();
+  try {
+    const [provider, usage] = await Promise.all([api("/api/me/provider"), api("/api/me/usage")]);
+    populateApiSettings(provider);
+    renderApiUsage(usage);
+  } catch (error) {
+    // If loading the dialog itself fails, the dialog is open and the global
+    // toast is hidden behind it — surface the error inline instead.
+    showApiSettingsNotice(error.message, "error");
+  }
+}
+
+function populateApiSettings(provider) {
+  ui.apiSettingsEnabled.checked = Boolean(provider?.enabled);
+  // Key fields intentionally left blank — server never returns plaintext.
+  // The per-field hint tells the user whether a key is stored (and that it
+  // can't be shown again, only replaced or removed).
+  setApiKeyFieldState(ui.apiSettingsPrimaryKey, provider?.primary?.hasKey);
+  setApiKeyFieldState(ui.apiSettingsMultimodalKey, provider?.multimodal?.hasKey);
+  ui.apiSettingsPrimaryEndpoint.value = provider?.primary?.baseUrl || "";
+  ui.apiSettingsPrimaryModel.value = provider?.primary?.model || "";
+  ui.apiSettingsMultimodalEndpoint.value = provider?.multimodal?.baseUrl || "";
+  ui.apiSettingsMultimodalModel.value = provider?.multimodal?.model || "";
+  // Hint in the toggle subtext reflects the active source.
+  if (ui.apiUsageSource) {
+    ui.apiUsageSource.textContent = provider?.enabled && provider?.primary?.hasKey
+      ? t("apiSourcePrivate")
+      : t("apiSourceServer");
+  }
+}
+
+// Reflect whether a key is already stored for a given field. The stored key
+// is never readable, so we only signal presence ("stored, hidden") and how to
+// replace or remove it. `querySelector` finds the hint sibling of the input.
+function setApiKeyFieldState(input, hasKey) {
+  if (!input) return;
+  input.value = "";
+  const hint = input.parentElement?.querySelector("[data-api-key-hint]");
+  if (hasKey) {
+    input.placeholder = "••••••••••••";
+    if (hint) { hint.hidden = false; hint.textContent = t("apiKeyStoredHidden"); }
+  } else {
+    input.placeholder = t("apiKeyPlaceholder");
+    if (hint) { hint.hidden = true; hint.textContent = ""; }
+  }
+}
+
+function renderApiUsage(usage) {
+  const hasData = usage && (usage.totalPromptTokens || usage.totalCompletionTokens || usage.totalTurns);
+  ui.apiUsagePanel.hidden = !hasData;
+  if (!hasData) return;
+  if (ui.apiUsagePrompt) ui.apiUsagePrompt.textContent = formatCompactTokens(usage.totalPromptTokens || 0);
+  if (ui.apiUsageCompletion) ui.apiUsageCompletion.textContent = formatCompactTokens(usage.totalCompletionTokens || 0);
+  if (ui.apiUsageTurns) ui.apiUsageTurns.textContent = String(usage.totalTurns || 0);
+  if (ui.apiUsageUpdated && usage.updatedAt) {
+    ui.apiUsageUpdated.textContent = `updated ${new Date(usage.updatedAt).toLocaleString()}`;
+  }
+}
+
+async function saveApiSettings(event) {
+  event.preventDefault();
+  const submit = event.submitter;
+  setAuthLoading(submit, true);
+  showApiSettingsNotice(null);
+  try {
+    const payload = {
+      enabled: ui.apiSettingsEnabled.checked,
+      primary: {
+        // Empty password field → "" → server keeps the previously stored key.
+        apiKey: ui.apiSettingsPrimaryKey.value,
+        baseUrl: ui.apiSettingsPrimaryEndpoint.value.trim(),
+        model: ui.apiSettingsPrimaryModel.value.trim(),
+      },
+      multimodal: {
+        apiKey: ui.apiSettingsMultimodalKey.value,
+        baseUrl: ui.apiSettingsMultimodalEndpoint.value.trim(),
+        model: ui.apiSettingsMultimodalModel.value.trim(),
+      },
+    };
+    const updated = await api("/api/me/provider", { method: "PUT", body: payload });
+    populateApiSettings(updated);
+    showApiSettingsNotice(t("apiSettingsSaved"), "success");
+  } catch (error) {
+    showApiSettingsNotice(error.message, "error");
+  } finally {
+    setAuthLoading(submit, false);
+  }
+}
+
+// Inline feedback inside the API settings dialog. The native <dialog> renders
+// in the browser top layer, which covers the global #toast — so we show save
+// and error status here instead, where the user can see it. Pass null/"" to hide.
+function showApiSettingsNotice(message, kind = "success") {
+  if (!ui.apiSettingsNotice) return;
+  if (!message) { ui.apiSettingsNotice.hidden = true; ui.apiSettingsNotice.textContent = ""; return; }
+  ui.apiSettingsNotice.hidden = false;
+  ui.apiSettingsNotice.textContent = message;
+  ui.apiSettingsNotice.className = `api-settings-notice ${kind === "error" ? "error" : "success"}`;
+  clearTimeout(showApiSettingsNotice.timer);
+  showApiSettingsNotice.timer = setTimeout(() => {
+    ui.apiSettingsNotice.hidden = true;
+    ui.apiSettingsNotice.textContent = "";
+  }, 5000);
 }
 
 async function enterApp() {
@@ -959,6 +1209,8 @@ function bindEvents() {
   });
   ui.logoutButton.addEventListener("click", handleLogout);
   ui.adminPanelButton.addEventListener("click", () => { toggleUserMenu(false); location.hash = "admin"; });
+  ui.apiSettingsButton.addEventListener("click", () => { toggleUserMenu(false); openApiSettingsDialog(); });
+  ui.apiSettingsForm.addEventListener("submit", saveApiSettings);
   ui.adminBackButton.addEventListener("click", () => {
     if (location.hash) {
       history.replaceState(null, "", location.pathname + location.search);
@@ -978,7 +1230,11 @@ function bindEvents() {
     if (!ui.userMenu.hidden && !ui.userMenu.contains(event.target)) toggleUserMenu(false);
   });
   $$('[data-create]').forEach((button) => button.addEventListener("click", openCreateDialog));
-  $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => ui.createDialog.close()));
+  $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => {
+    // Tutup <dialog> terdekat dari tombol ini (create, export, api-settings, dsb.).
+    const dialog = button.closest("dialog");
+    if (dialog) dialog.close();
+  }));
   ui.createForm.addEventListener("submit", createSession);
   $("#backButton").addEventListener("click", () => { location.hash = ""; });
   ui.promptForm.addEventListener("submit", sendPrompt);

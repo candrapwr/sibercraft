@@ -40,6 +40,12 @@ export async function captureFullPage({ url, width = 1440, timeout = 60_000 }) {
       awaitPromise: true,
       returnByValue: true,
     }, sessionId);
+    // If the page signals iframe-ready via document.title === 'thumb-ready',
+    // wait for it (poll up to 15s). This is used by the thumbnail layout page.
+    await cdp.call("Runtime.evaluate", {
+      expression: `(async()=>{for(var i=0;i<60;i++){if(document.title==='thumb-ready')return;await new Promise(function(r){setTimeout(r,250)})}})()`,
+      awaitPromise: true,
+    }, sessionId);
     const metrics = await cdp.call("Page.getLayoutMetrics", {}, sessionId);
     const content = metrics.cssContentSize || metrics.contentSize;
     const screenshotWidth = clamp(Math.ceil(content.width), 1, 4096);

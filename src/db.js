@@ -42,6 +42,31 @@ export function runMigrations(db) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    -- User-supplied provider config (BYOK). config_blob holds AES-256-GCM
+    -- encrypted JSON { primary:{apiKey,baseUrl,model}, multimodal:{...} }.
+    -- key_fingerprint lets us detect SESSION_SECRET rotation so an undecryptable
+    -- blob is treated as missing instead of crashing the request.
+    CREATE TABLE IF NOT EXISTS user_provider_config (
+      user_id         TEXT PRIMARY KEY,
+      enabled         INTEGER NOT NULL DEFAULT 0,
+      config_blob     TEXT,
+      key_fingerprint TEXT,
+      updated_at      TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- Aggregate token usage per user, incremented ONLY when the user chats
+    -- using their own private provider key (server-default usage is not billed
+    -- here). One row per user, upserted per turn.
+    CREATE TABLE IF NOT EXISTS user_token_usage (
+      user_id                TEXT PRIMARY KEY,
+      total_prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+      total_completion_tokens INTEGER NOT NULL DEFAULT 0,
+      total_turns             INTEGER NOT NULL DEFAULT 0,
+      updated_at             TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_verification_tokens_user
       ON verification_tokens(user_id);
   `);
