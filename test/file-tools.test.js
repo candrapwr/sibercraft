@@ -274,3 +274,78 @@ test("grep: truncate baris sangat panjang", async (t) => {
   assert.match(result.result, /…\n?$/);
   assert.ok(result.result.length < 400, "hasil tidak boleh terlalu panjang");
 });
+
+test("write_file: menolak path yang sudah ada sebagai direktori (EISDIR guard)", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-eisdir-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "assets")); // buat direktori 'assets'
+  const tools = createFileTools(root);
+
+  const result = await tools.execute("write_file", JSON.stringify({ path: "assets", content: "x" }));
+  assert.equal(result.mutated, false);
+  assert.match(result.result, /^Error:/);
+  assert.match(result.result, /direktori yang sudah ada/i);
+  assert.match(result.result, /assets\/index\.html/);
+  // Pesan tidak boleh EISDIR mentah yang membingungkan
+  assert.equal(result.result.includes("EISDIR"), false);
+});
+
+test("write_file: sukses menulis file di dalam direktori yang ada (bukan path direktori itu sendiri)", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-eisdir-ok-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "assets"));
+  const tools = createFileTools(root);
+
+  const result = await tools.execute("write_file", JSON.stringify({ path: "assets/logo.svg", content: "<svg/>" }));
+  assert.equal(result.mutated, true);
+  assert.match(result.result, /Berhasil menulis/);
+  assert.equal(await readFile(join(root, "assets", "logo.svg"), "utf8"), "<svg/>");
+});
+
+test("edit_file: menolak path yang sudah ada sebagai direktori (EISDIR guard)", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-eisdir-edit-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "components"));
+  const tools = createFileTools(root);
+
+  const result = await tools.execute("edit_file", JSON.stringify({
+    path: "components", old_string: "a", new_string: "b",
+  }));
+  assert.equal(result.mutated, false);
+  assert.match(result.result, /^Error:/);
+  assert.match(result.result, /direktori yang sudah ada/i);
+});
+
+test("write_file: error jelas bila 'path' tidak diisi (mis. AI kirim 'file')", async (t) => {
+  // AI kadang salah kirim {file:...} (schema create_frame) ke write_file.
+  // Alih-alih silent resolve ke workspace root (EISDIR), beri pesan yang
+  // membimbing AI memakai parameter 'path' yang benar.
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-nopath-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const tools = createFileTools(root);
+
+  // path kosong / tidak ada → error jelas
+  const result = await tools.execute("write_file", JSON.stringify({ content: "x" }));
+  assert.equal(result.mutated, false);
+  assert.match(result.result, /^Error:/);
+  assert.match(result.result, /'path' wajib diisi/i);
+  assert.match(result.result, /'path', bukan 'file'/i);
+  // Workspace root tidak ter-overwrite
+  assert.ok((await stat(root)).isDirectory());
+
+  // AI kirim {file:...} → path tetap undefined → error jelas (tidak ditoleransi)
+  const wrongKey = await tools.execute("write_file", JSON.stringify({ file: "x.html", content: "y" }));
+  assert.equal(wrongKey.mutated, false);
+  assert.match(wrongKey.result, /'path', bukan 'file'/i);
+});
+
+test("edit_file: error jelas bila 'path' tidak diisi", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "forma-tools-edit-nopath-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const tools = createFileTools(root);
+
+  const result = await tools.execute("edit_file", JSON.stringify({ file: "page.html", old_string: "a", new_string: "b" }));
+  assert.equal(result.mutated, false);
+  assert.match(result.result, /^Error:/);
+  assert.match(result.result, /'path', bukan 'file'/i);
+});

@@ -99,26 +99,32 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       const start = (offset ?? 1) - 1;
       return lines.slice(start, limit ? start + limit : undefined).join("\n");
     }),
-    tool("write_file", "Create or overwrite a text file. Parent directories are created automatically.", {
+    tool("write_file", "Create or overwrite a text file. Parent directories are created automatically. The parameter is named `path` (NOT `file`); `file` is only used by create_frame.", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace" },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file')" },
         content: { type: "string", description: "Full file contents" },
       },
       required: ["path", "content"],
       additionalProperties: false,
     }, async ({ path, content }) => {
+      if (!path || !String(path).trim()) {
+        // Models sometimes pass `file` instead of `path`. Reject with a clear
+        // hint rather than silently resolving to the workspace root (EISDIR).
+        throw new Error("Parameter 'path' wajib diisi (mis. 'index.html'). Catatan: parameter ini bernama 'path', bukan 'file' — 'file' hanya dipakai oleh create_frame.");
+      }
       if (typeof content !== "string" || content.length > 2_000_000) throw new Error("Content file tidak valid atau terlalu besar");
       const fullPath = await resolveWithin(workspaceDir, path);
+      await assertNotDirectory(fullPath, path);
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, content, "utf8");
       await onMutation(path);
-      return `Berhasil menulis ${content.length} byte ke ${toRelative(workspaceDir, fullPath)}`;
+      return `Berhasil menulis ${content.length} byte ke ${path}`;
     }, true),
-    tool("edit_file", "Replace unique text inside a file. Include enough surrounding context so old_string matches only once.", {
+    tool("edit_file", "Replace unique text inside a file. Include enough surrounding context so old_string matches only once. The parameter is named `path` (NOT `file`).", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace" },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file')" },
         old_string: { type: "string", description: "Exact text to replace" },
         new_string: { type: "string", description: "Replacement text" },
         replace_all: { type: "boolean", description: "Replace every occurrence; default false" },
@@ -126,8 +132,12 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       required: ["path", "old_string", "new_string"],
       additionalProperties: false,
     }, async ({ path, old_string, new_string, replace_all = false }) => {
+      if (!path || !String(path).trim()) {
+        throw new Error("Parameter 'path' wajib diisi (mis. 'index.html'). Catatan: parameter ini bernama 'path', bukan 'file'.");
+      }
       if (old_string === new_string) throw new Error("old_string dan new_string identik");
       const fullPath = await resolveWithin(workspaceDir, path);
+      await assertNotDirectory(fullPath, path);
       const content = await readFile(fullPath, "utf8");
       const first = content.indexOf(old_string);
       if (first < 0) throw new Error("old_string tidak ditemukan");
@@ -323,6 +333,25 @@ function tool(name, description, parameters, execute, mutates = false) {
 
 function toRelative(root, path) {
   return relative(root, path).split("\\").join("/");
+}
+
+/**
+ * Reject write/edit targets that resolve to an existing directory. Without
+ * this guard, writeFile throws a cryptic EISDIR ("illegal operation on a
+ * directory") which often happens when the AI sends a path that collides
+ * with a folder it created earlier (e.g. write_file({path:"assets"}) when
+ * an assets/ folder exists). The clear message lets the model self-correct.
+ */
+async function assertNotDirectory(fullPath, requestedPath) {
+  try {
+    const info = await stat(fullPath);
+    if (info.isDirectory()) {
+      throw new Error(`'${requestedPath}' adalah direktori yang sudah ada, bukan file. Gunakan nama file lengkap (mis. '${requestedPath}/index.html') atau pilih path lain.`);
+    }
+  } catch (error) {
+    // ENOENT = path tidak ada → aman, lanjut (akan dibuat). Re-throw error lain.
+    if (error.code !== "ENOENT") throw error;
+  }
 }
 
 // Max file size we'll grep into; larger files are likely binary/minified and

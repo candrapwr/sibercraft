@@ -70,6 +70,17 @@ export function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_verification_tokens_user
       ON verification_tokens(user_id);
 
+    -- Admin-configured GLOBAL provider (overrides .env for everyone without
+    -- an active BYOK config). Single row keyed by a constant id=1 — no FK
+    -- because this is not tied to a user row.
+    CREATE TABLE IF NOT EXISTS global_provider_config (
+      id              INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled         INTEGER NOT NULL DEFAULT 0,
+      config_blob     TEXT,
+      key_fingerprint TEXT,
+      updated_at      TEXT NOT NULL
+    );
+
     -- Admin-facing AI error log. Captured for every non-abort failure during
     -- an AI turn (primary & multimodal). Prompts are intentionally NOT stored.
     -- Retention is manual: admins delete entries or clear all from the panel.

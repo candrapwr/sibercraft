@@ -7,6 +7,11 @@
 // provider key (server-default usage is the operator's cost, not the user's,
 // and is intentionally not counted here). One row per user, upserted per turn.
 
+// Reserved key for the admin-configured GLOBAL provider (overrides .env for
+// every user without an active BYOK config). Reuses the same store/table —
+// the key just isn't a real user id, so usage tracking never targets it.
+export const GLOBAL_PROVIDER_KEY = "__global__";
+
 import { encryptSecret, decryptSecret, secretFingerprint } from "../auth/crypto-secret.js";
 
 const EMPTY_USAGE = {
@@ -48,6 +53,19 @@ export class ProviderStore {
           total_turns = total_turns + 1,
           updated_at = excluded.updated_at
       `),
+      // Global provider lives in its own table (single row, id=1) to avoid the
+      // FK constraint on user_provider_config ("__global__" isn't a real user).
+      getGlobal: db.prepare("SELECT * FROM global_provider_config WHERE id = 1"),
+      upsertGlobal: db.prepare(`
+        INSERT INTO global_provider_config (id, enabled, config_blob, key_fingerprint, updated_at)
+        VALUES (1, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          enabled = excluded.enabled,
+          config_blob = excluded.config_blob,
+          key_fingerprint = excluded.key_fingerprint,
+          updated_at = excluded.updated_at
+      `),
+      deleteGlobal: db.prepare("DELETE FROM global_provider_config WHERE id = 1"),
     };
   }
 
@@ -97,6 +115,40 @@ export class ProviderStore {
   }
 
   /**
+   * Read the GLOBAL provider config (decrypted). Same shape and graceful-
+   * degradation rules as get(), but reads from global_provider_config (a
+   * single-row table without a user FK). Returns a disabled/empty config if
+   * no row exists or the secret has rotated.
+   */
+  async getGlobal() {
+    const row = this.stmt.getGlobal.get();
+    if (!row || !row.config_blob) return disabledConfig();
+    if (row.key_fingerprint !== this.fingerprint) return disabledConfig();
+    try {
+      const key = await this.cryptoKey;
+      const json = await decryptSecret(row.config_blob, key);
+      const parsed = JSON.parse(json);
+      return {
+        enabled: Boolean(row.enabled),
+        primary: normalizeProvider(parsed.primary),
+        multimodal: normalizeProvider(parsed.multimodal),
+      };
+    } catch {
+      return disabledConfig();
+    }
+  }
+
+  /** Global config redacted for the admin UI (apiKey → hasKey boolean). */
+  async getGlobalRedacted() {
+    const config = await this.getGlobal();
+    return {
+      enabled: config.enabled,
+      primary: redactProvider(config.primary),
+      multimodal: redactProvider(config.multimodal),
+    };
+  }
+
+  /**
    * Persist provider config. API keys are encrypted before storage.
    *
    * Keep-existing-key behavior: if `payload.<scope>.apiKey` is blank (empty
@@ -122,6 +174,29 @@ export class ProviderStore {
   /** Delete the config row entirely (also clears `enabled`). */
   async clear(userId) {
     this.stmt.deleteConfig.run(String(userId || ""));
+  }
+
+  /**
+   * Persist the GLOBAL provider config. Same keep-existing-key merge logic as
+   * save(), but writes to the single-row global_provider_config table.
+   */
+  async saveGlobal(payload = {}) {
+    const previous = await this.getGlobal();
+    const merged = {
+      primary: mergeProvider(previous.primary, payload.primary),
+      multimodal: mergeProvider(previous.multimodal, payload.multimodal),
+    };
+    const key = await this.cryptoKey;
+    const blob = await encryptSecret(JSON.stringify(merged), key);
+    const enabled = payload.enabled ? 1 : 0;
+    const now = new Date().toISOString();
+    this.stmt.upsertGlobal.run(enabled, blob, this.fingerprint, now);
+    return this.getGlobalRedacted();
+  }
+
+  /** Delete the global provider config row. */
+  async clearGlobal() {
+    this.stmt.deleteGlobal.run();
   }
 
   /** Read aggregate usage. Returns the EMPTY_USAGE shape if no row exists. */

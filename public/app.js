@@ -155,6 +155,7 @@ function applyStaticText() {
   ui.closeImageLightbox.setAttribute("aria-label", t("closeImagePreview"));
   ui.closeAuthButton.setAttribute("aria-label", t("close"));
   applyApiSettingsStaticText();
+  applyGlobalProviderStaticText();
   renderAiStatus();
   applySessionHeading();
 }
@@ -221,6 +222,17 @@ function applyApiSettingsStaticText() {
   const actions = $$(".dialog-actions button", dialog);
   if (actions[0]) actions[0].textContent = t("cancel");
   if (actions[1]) actions[1].childNodes[0].textContent = `${t("apiSaveSettings")} `;
+}
+
+/** Translate the admin global-provider panel's static text on language change. */
+function applyGlobalProviderStaticText() {
+  if (!ui.adminProviderPanel) return;
+  const title = $("#globalProviderTitle");
+  if (title) title.textContent = t("globalProviderTitle");
+  const desc = $("#globalProviderDesc");
+  if (desc) desc.textContent = t("globalProviderDesc");
+  const toggleLabel = $("#globalProviderToggle");
+  if (toggleLabel) toggleLabel.textContent = t("globalProviderToggle");
 }
 
 function setPlaceholderIfEmpty(input, placeholder) {
@@ -716,14 +728,16 @@ function formatAdminDate(iso) {
 // Switch between admin panels (Users / Error logs). Toggles nav active state,
 // shows/hides the corresponding panel, and loads its data.
 function switchAdminTab(name) {
-  if (name !== "users" && name !== "errors") return;
+  if (name !== "users" && name !== "errors" && name !== "provider") return;
   $$("[data-admin-nav]").forEach((button) => {
     button.classList.toggle("active", button.dataset.adminNav === name);
   });
   ui.adminUsersPanel.hidden = name !== "users";
   ui.adminErrorsPanel.hidden = name !== "errors";
+  ui.adminProviderPanel.hidden = name !== "provider";
   if (name === "errors" && adminErrorState.logs.length === 0) loadAdminErrors();
   if (name === "users") loadAdminUsers();
+  if (name === "provider") loadAdminProvider();
 }
 
 // Compute the `since` ISO cutoff from a time-range label (today/7d/30d).
@@ -734,6 +748,82 @@ function errorSinceIso(label) {
   if (label === "7d") return new Date(now - 7 * 86400_000).toISOString();
   if (label === "30d") return new Date(now - 30 * 86400_000).toISOString();
   return undefined;
+}
+
+// --- Admin global provider (overrides .env for everyone without BYOK) ---
+async function loadAdminProvider() {
+  try {
+    const provider = await api("/api/admin/provider");
+    populateGlobalProvider(provider);
+    showGlobalProviderNotice(null);
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+function populateGlobalProvider(provider) {
+  ui.globalProviderEnabled.checked = Boolean(provider?.enabled);
+  setGlobalKeyFieldState(ui.globalProviderPrimaryKey, provider?.primary?.hasKey);
+  setGlobalKeyFieldState(ui.globalProviderMultimodalKey, provider?.multimodal?.hasKey);
+  ui.globalProviderPrimaryEndpoint.value = provider?.primary?.baseUrl || "";
+  ui.globalProviderPrimaryModel.value = provider?.primary?.model || "";
+  ui.globalProviderMultimodalEndpoint.value = provider?.multimodal?.baseUrl || "";
+  ui.globalProviderMultimodalModel.value = provider?.multimodal?.model || "";
+}
+
+function setGlobalKeyFieldState(input, hasKey) {
+  if (!input) return;
+  input.value = "";
+  const hint = input.parentElement?.querySelector("[data-global-key-hint]");
+  if (hasKey) {
+    input.placeholder = "••••••••••••";
+    if (hint) { hint.hidden = false; hint.textContent = t("apiKeyStoredHidden"); }
+  } else {
+    input.placeholder = t("apiKeyPlaceholder");
+    if (hint) { hint.hidden = true; hint.textContent = ""; }
+  }
+}
+
+async function saveGlobalProvider(event) {
+  event.preventDefault();
+  const submit = event.submitter;
+  setAuthLoading(submit, true);
+  showGlobalProviderNotice(null);
+  try {
+    const payload = {
+      enabled: ui.globalProviderEnabled.checked,
+      primary: {
+        apiKey: ui.globalProviderPrimaryKey.value,
+        baseUrl: ui.globalProviderPrimaryEndpoint.value.trim(),
+        model: ui.globalProviderPrimaryModel.value.trim(),
+      },
+      multimodal: {
+        apiKey: ui.globalProviderMultimodalKey.value,
+        baseUrl: ui.globalProviderMultimodalEndpoint.value.trim(),
+        model: ui.globalProviderMultimodalModel.value.trim(),
+      },
+    };
+    const updated = await api("/api/admin/provider", { method: "PUT", body: payload });
+    populateGlobalProvider(updated);
+    showGlobalProviderNotice(t("globalProviderSaved"), "success");
+  } catch (error) {
+    showGlobalProviderNotice(error.message, "error");
+  } finally {
+    setAuthLoading(submit, false);
+  }
+}
+
+function showGlobalProviderNotice(message, kind = "success") {
+  if (!ui.globalProviderNotice) return;
+  if (!message) { ui.globalProviderNotice.hidden = true; ui.globalProviderNotice.textContent = ""; return; }
+  ui.globalProviderNotice.hidden = false;
+  ui.globalProviderNotice.textContent = message;
+  ui.globalProviderNotice.className = `api-settings-notice ${kind === "error" ? "error" : "success"}`;
+  clearTimeout(showGlobalProviderNotice.timer);
+  showGlobalProviderNotice.timer = setTimeout(() => {
+    ui.globalProviderNotice.hidden = true;
+    ui.globalProviderNotice.textContent = "";
+  }, 5000);
 }
 
 async function loadAdminErrors() {
@@ -1034,6 +1124,7 @@ function bindEvents() {
   $$("[data-admin-nav]").forEach((button) => {
     button.addEventListener("click", () => switchAdminTab(button.dataset.adminNav));
   });
+  ui.globalProviderForm?.addEventListener("submit", saveGlobalProvider);
   // Error log filters + pagination + actions.
   ui.adminErrorFilterType?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });
   ui.adminErrorFilterSince?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });

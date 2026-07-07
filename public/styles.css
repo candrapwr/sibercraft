@@ -604,6 +604,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-you { margin-left: 8px; padding: 1px 6px; border-radius: 5px; background: var(--green-soft); color: var(--green); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 /* Admin error log panel */
 .admin-panel[hidden] { display: none; }
+/* Admin global provider panel: reuse API-settings field styles, but render as
+   inline panel content (not a dialog) with a max-width form column. */
+.admin-provider-desc { margin: 14px 0 18px; color: #8fa197; font-size: 13px; line-height: 1.6; max-width: 620px; }
+.admin-provider-form { max-width: 620px; }
+.admin-provider-actions { margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(208,220,212,.1); }
 .admin-content-actions { display: flex; align-items: center; gap: 14px; }
 .danger-ghost { color: #e0a09a; }
 .danger-ghost:hover { background: rgba(220,102,92,.14); color: #f0b4ad; }

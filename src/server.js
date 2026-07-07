@@ -184,6 +184,29 @@ async function handleApi(request, response, url, user) {
     if (!deleted) throw new HttpError(404, "Log tidak ditemukan");
     return sendJson(response, 200, { ok: true });
   }
+  // --- Admin global provider routes (wajib admin) ---
+  // Reuses ProviderStore with a reserved GLOBAL_PROVIDER_KEY so the same
+  // encryption/redaction/keep-existing-key logic serves both BYOK and global.
+  if (url.pathname === "/api/admin/provider") {
+    requireAdmin(user);
+    if (method === "GET") {
+      return sendJson(response, 200, await providerStore.getGlobalRedacted());
+    }
+    if (method === "PUT") {
+      const body = await readJson(request);
+      const payload = {
+        enabled: Boolean(body?.enabled),
+        primary: validateProviderPayload(body?.primary),
+        multimodal: validateProviderPayload(body?.multimodal),
+      };
+      return sendJson(response, 200, await providerStore.saveGlobal(payload));
+    }
+    if (method === "DELETE") {
+      await providerStore.clearGlobal();
+      return sendJson(response, 200, { ok: true });
+    }
+    throw new HttpError(405, "Method tidak diizinkan");
+  }
 
   // --- Session routes: login ATAU anon (resolve owner dari cookie user/anon) ---
   const owner = await resolveOwner(request, response, user, {
@@ -596,22 +619,43 @@ function validateProviderPayload(value) {
 }
 
 /**
- * Bangun agent config dengan override provider pribadi bila user mengaktifkannya.
- * Mengembalikan { config, providerSource }:
- *   - providerSource "user"  → primary pakai key user (usage akan di-track).
- *   - providerSource "server" → pakai config.deepseek default.
- * Multimodal: bila user set multimodal sendiri, override; selain itu fallback default.
+ * Resolve the agent config using a 3-tier priority:
+ *   1. User BYOK (enabled + has primary key) → billed to that user.
+ *   2. Admin global provider (enabled + has primary key) → operator cost,
+ *      applies to everyone without active BYOK (including anon).
+ *   3. .env default (config.deepseek).
+ *
+ * `userId` may be null/anon-id — tier 1 is skipped for null/anon so they
+ * still fall through to the global provider.
  */
 async function resolveProviderConfig(userId, baseConfig) {
-  const provider = await providerStore.get(userId);
-  if (!provider.enabled || !provider.primary.apiKey) {
-    return { config: baseConfig, providerSource: "server" };
+  // Tier 1: user BYOK (skip for anon / null).
+  if (userId && !String(userId).startsWith("anon-")) {
+    const userProvider = await providerStore.get(userId);
+    if (userProvider.enabled && userProvider.primary.apiKey) {
+      return { config: mergeProvider(baseConfig, userProvider, "user"), providerSource: "user" };
+    }
   }
-  const merged = { ...baseConfig, _providerSource: "user" };
+  // Tier 2: admin global provider.
+  const globalProvider = await providerStore.getGlobal();
+  if (globalProvider.enabled && globalProvider.primary.apiKey) {
+    return { config: mergeProvider(baseConfig, globalProvider, "server"), providerSource: "server" };
+  }
+  // Tier 3: .env default.
+  return { config: baseConfig, providerSource: "server" };
+}
+
+/**
+ * Merge a provider config (BYOK or global) onto the .env base config.
+ * `source` is "user" or "server" — recorded as _providerSource so token
+ * accounting and error logging know which key paid for the turn.
+ */
+function mergeProvider(baseConfig, provider, source) {
+  const merged = { ...baseConfig, _providerSource: source };
   merged.apiKey = provider.primary.apiKey;
   if (provider.primary.baseUrl) merged.baseUrl = provider.primary.baseUrl.replace(/\/$/, "");
   if (provider.primary.model) merged.model = provider.primary.model;
-  // Multimodal override hanya bila user punya key multimodal sendiri.
+  // Multimodal override only when the provider supplies its own multimodal key.
   if (provider.multimodal.apiKey) {
     merged.multimodal = {
       apiKey: provider.multimodal.apiKey,
@@ -619,7 +663,7 @@ async function resolveProviderConfig(userId, baseConfig) {
       model: provider.multimodal.model || merged.multimodal.model,
     };
   }
-  return { config: merged, providerSource: "user" };
+  return merged;
 }
 
 async function sendVerificationEmail({ to, verifyUrl }) {
@@ -717,14 +761,12 @@ async function streamChat(request, response, id, access) {
   // the catch handler (for error logging). Previously `agentConfig` was a const
   // inside try → ReferenceError in catch → silently swallowed by the logging
   // try/catch → errors never made it to the admin log.
+  // Resolution covers 3 tiers: user BYOK → admin global → .env default.
+  // Anon skips tier 1 (no BYOK) but still benefits from the global provider.
   let agentConfig = config.deepseek;
   try {
-    // Override default provider with the user's BYOK config if they enabled one.
-    // Only applies to logged-in users; anon always uses the server default.
-    if (access.ownerId && !access.ownerId.startsWith("anon-")) {
-      const resolved = await resolveProviderConfig(access.ownerId, config.deepseek);
-      agentConfig = resolved.config;
-    }
+    const resolved = await resolveProviderConfig(access.ownerId, config.deepseek);
+    agentConfig = resolved.config;
     result = await runAgent({
       session,
       store,

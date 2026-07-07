@@ -80,6 +80,7 @@
       <div class="admin-brand"><span class="brand-mark">S</span><strong>SiberCraft</strong><small>Admin</small></div>
       <nav class="admin-nav">
         <button class="admin-nav-item active" type="button" data-admin-nav="users">◈ Users</button>
+        <button class="admin-nav-item" type="button" data-admin-nav="provider">⚙ Global provider</button>
         <button class="admin-nav-item" type="button" data-admin-nav="errors">⚠ Error logs</button>
       </nav>
       <button id="adminBackButton" class="admin-nav-item" type="button">← Back to app</button>
@@ -103,6 +104,61 @@
           </table>
         </div>
         <div id="adminEmpty" class="admin-empty" hidden>No users found.</div>
+      </div>
+
+      <!-- Global provider panel -->
+      <div id="adminProviderPanel" class="admin-panel" hidden>
+        <header class="admin-content-header">
+          <div><p class="kicker">CONFIGURATION</p><h2 id="globalProviderTitle">Global AI provider</h2></div>
+        </header>
+        <p class="admin-provider-desc" id="globalProviderDesc">When enabled, this provider overrides the .env default for everyone without an active personal key (BYOK). Users with their own enabled key are unaffected.</p>
+        <div class="api-security-note">
+          <span class="api-security-icon" aria-hidden="true">🔒</span>
+          <div class="api-security-text">
+            <strong>Keys are encrypted and kept secret</strong>
+            <small>Same AES-256 encryption as personal keys. A saved key cannot be viewed again — only replaced or removed.</small>
+          </div>
+        </div>
+        <form id="globalProviderForm" class="admin-provider-form">
+          <label class="api-toggle-row">
+            <input id="globalProviderEnabled" name="enabled" type="checkbox">
+            <span class="api-toggle-text"><strong id="globalProviderToggle">Enable global provider</strong><small>Applies to all users and guests without an active personal key.</small></span>
+          </label>
+          <fieldset class="api-provider-group">
+            <legend>Primary <small>text/code generation</small></legend>
+            <label class="field"><span>API key</span>
+              <input id="globalProviderPrimaryKey" name="primaryKey" type="password" autocomplete="off" placeholder="Leave blank to keep the stored key">
+              <span class="api-key-hint" data-global-key-hint hidden></span>
+            </label>
+            <div class="api-field-row">
+              <label class="field"><span>Endpoint</span>
+                <input id="globalProviderPrimaryEndpoint" name="primaryEndpoint" type="url" autocomplete="off" placeholder="https://api.example.com/v1">
+              </label>
+              <label class="field"><span>Model</span>
+                <input id="globalProviderPrimaryModel" name="primaryModel" type="text" autocomplete="off" placeholder="model-name">
+              </label>
+            </div>
+          </fieldset>
+          <fieldset class="api-provider-group">
+            <legend>Multimodal <small>image input — optional</small></legend>
+            <label class="field"><span>API key</span>
+              <input id="globalProviderMultimodalKey" name="multimodalKey" type="password" autocomplete="off" placeholder="Leave blank to keep the stored key">
+              <span class="api-key-hint" data-global-key-hint hidden></span>
+            </label>
+            <div class="api-field-row">
+              <label class="field"><span>Endpoint</span>
+                <input id="globalProviderMultimodalEndpoint" name="multimodalEndpoint" type="url" autocomplete="off" placeholder="https://api.example.com/v1">
+              </label>
+              <label class="field"><span>Model</span>
+                <input id="globalProviderMultimodalModel" name="multimodalModel" type="text" autocomplete="off" placeholder="model-name">
+              </label>
+            </div>
+          </fieldset>
+          <div class="dialog-actions admin-provider-actions">
+            <div id="globalProviderNotice" class="api-settings-notice" role="status" hidden></div>
+            <button type="submit" class="button button-dark">Save global provider <span>→</span></button>
+          </div>
+        </form>
       </div>
 
       <!-- Error logs panel -->
