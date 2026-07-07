@@ -987,6 +987,17 @@ function renderAdminUsers() {
         activateBtn.addEventListener("click", () => adminActivateUser(u));
         actionsCell.appendChild(activateBtn);
       }
+      // Toggle role: promote to admin or demote to user.
+      const roleBtn = document.createElement("button");
+      roleBtn.className = "admin-action-btn";
+      if (u.role === "admin") {
+        roleBtn.textContent = "Make user";
+        roleBtn.addEventListener("click", () => adminChangeRole(u, "user"));
+      } else {
+        roleBtn.textContent = "Make admin";
+        roleBtn.addEventListener("click", () => adminChangeRole(u, "admin"));
+      }
+      actionsCell.appendChild(roleBtn);
       const delBtn = document.createElement("button");
       delBtn.className = "admin-action-btn danger";
       delBtn.textContent = "Delete";
@@ -1010,6 +1021,18 @@ async function adminActivateUser(u) {
     Object.assign(u, updated);
     renderAdminUsers();
     notify(t("adminUserActivated", { email: u.email }));
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+async function adminChangeRole(u, role) {
+  const verb = role === "admin" ? t("adminPromote") : t("adminDemote");
+  try {
+    const updated = await api(`/api/admin/users/${u.id}`, { method: "PATCH", body: { role } });
+    Object.assign(u, updated);
+    renderAdminUsers();
+    notify(`${verb}: ${u.email}`);
   } catch (error) {
     notify(error.message, true);
   }
