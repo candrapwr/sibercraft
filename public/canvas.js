@@ -65,6 +65,7 @@ export const canvas = {
   getFrames: () => [...frames.values()].map((f) => f.state),
   reloadFrame,
   setDrafting,
+  clearAllDrafting,
   fitAll,
   setOnFramePersist(fn) { onFramePersist = fn; },
 };
@@ -217,6 +218,11 @@ function setDrafting(file, on) {
   for (const frame of frames.values()) {
     if (frame.state.file === file) frame.el.classList.toggle("drafting", on);
   }
+}
+
+/** Clear the drafting state on every frame (safety net at turn end). */
+function clearAllDrafting() {
+  for (const frame of frames.values()) frame.el.classList.remove("drafting");
 }
 
 function reloadAll(file) {

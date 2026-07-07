@@ -307,6 +307,11 @@ export function onTurnStart() {
 export function onTurnDone() {
   if (!inCanvas) return;
   activeDraftPath = null;
+  // Safety net: clear any drafting state that may have been left on frames
+  // (e.g. a preview_draft_clear that didn't arrive, or a race with the final
+  // force-flush). Guarantees no frame stays stuck in "drafting" after a turn.
+  canvas.clearAllDrafting();
+  for (const file of [...draftTimers.keys()]) onDraftClear(file);
   // Small delay so the final preview reload settles first.
   fitTimer = setTimeout(() => {
     fitTimer = null;

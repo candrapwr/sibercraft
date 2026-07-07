@@ -99,18 +99,16 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       const start = (offset ?? 1) - 1;
       return lines.slice(start, limit ? start + limit : undefined).join("\n");
     }),
-    tool("write_file", "Create or overwrite a text file. Parent directories are created automatically. The parameter is named `path` (NOT `file`); `file` is only used by create_frame.", {
+    tool("write_file", "Create or overwrite a text file. Parent directories are created automatically. The parameter is named `path` (NOT `file`); `file` is only used by create_frame. CRITICAL: always emit `path` BEFORE `content` in the JSON object (e.g. {\"path\":\"index.html\",\"content\":\"...\"}) so the preview can stream live — if `content` comes first, the preview cannot update until the whole file finishes.", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file')" },
-        content: { type: "string", description: "Full file contents" },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this FIRST in the JSON object, before content." },
+        content: { type: "string", description: "Full file contents. Emit this AFTER path in the JSON object." },
       },
       required: ["path", "content"],
       additionalProperties: false,
     }, async ({ path, content }) => {
       if (!path || !String(path).trim()) {
-        // Models sometimes pass `file` instead of `path`. Reject with a clear
-        // hint rather than silently resolving to the workspace root (EISDIR).
         throw new Error("Parameter 'path' wajib diisi (mis. 'index.html'). Catatan: parameter ini bernama 'path', bukan 'file' — 'file' hanya dipakai oleh create_frame.");
       }
       if (typeof content !== "string" || content.length > 2_000_000) throw new Error("Content file tidak valid atau terlalu besar");
@@ -121,10 +119,10 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       await onMutation(path);
       return `Berhasil menulis ${content.length} byte ke ${path}`;
     }, true),
-    tool("edit_file", "Replace unique text inside a file. Include enough surrounding context so old_string matches only once. The parameter is named `path` (NOT `file`).", {
+    tool("edit_file", "Replace unique text inside a file. Include enough surrounding context so old_string matches only once. The parameter is named `path` (NOT `file`). Always emit `path` FIRST in the JSON object so the editing frame can be identified early.", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file')" },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this FIRST in the JSON object." },
         old_string: { type: "string", description: "Exact text to replace" },
         new_string: { type: "string", description: "Replacement text" },
         replace_all: { type: "boolean", description: "Replace every occurrence; default false" },
@@ -335,13 +333,7 @@ function toRelative(root, path) {
   return relative(root, path).split("\\").join("/");
 }
 
-/**
- * Reject write/edit targets that resolve to an existing directory. Without
- * this guard, writeFile throws a cryptic EISDIR ("illegal operation on a
- * directory") which often happens when the AI sends a path that collides
- * with a folder it created earlier (e.g. write_file({path:"assets"}) when
- * an assets/ folder exists). The clear message lets the model self-correct.
- */
+/** Reject write/edit targets that resolve to an existing directory (EISDIR guard). */
 async function assertNotDirectory(fullPath, requestedPath) {
   try {
     const info = await stat(fullPath);

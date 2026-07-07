@@ -185,8 +185,6 @@ async function handleApi(request, response, url, user) {
     return sendJson(response, 200, { ok: true });
   }
   // --- Admin global provider routes (wajib admin) ---
-  // Reuses ProviderStore with a reserved GLOBAL_PROVIDER_KEY so the same
-  // encryption/redaction/keep-existing-key logic serves both BYOK and global.
   if (url.pathname === "/api/admin/provider") {
     requireAdmin(user);
     if (method === "GET") {
@@ -618,38 +616,22 @@ function validateProviderPayload(value) {
   return { apiKey, baseUrl, model };
 }
 
-/**
- * Resolve the agent config using a 3-tier priority:
- *   1. User BYOK (enabled + has primary key) → billed to that user.
- *   2. Admin global provider (enabled + has primary key) → operator cost,
- *      applies to everyone without active BYOK (including anon).
- *   3. .env default (config.deepseek).
- *
- * `userId` may be null/anon-id — tier 1 is skipped for null/anon so they
- * still fall through to the global provider.
- */
+/** Resolve agent config: user BYOK → admin global → .env default. */
 async function resolveProviderConfig(userId, baseConfig) {
-  // Tier 1: user BYOK (skip for anon / null).
   if (userId && !String(userId).startsWith("anon-")) {
     const userProvider = await providerStore.get(userId);
     if (userProvider.enabled && userProvider.primary.apiKey) {
       return { config: mergeProvider(baseConfig, userProvider, "user"), providerSource: "user" };
     }
   }
-  // Tier 2: admin global provider.
   const globalProvider = await providerStore.getGlobal();
   if (globalProvider.enabled && globalProvider.primary.apiKey) {
     return { config: mergeProvider(baseConfig, globalProvider, "server"), providerSource: "server" };
   }
-  // Tier 3: .env default.
   return { config: baseConfig, providerSource: "server" };
 }
 
-/**
- * Merge a provider config (BYOK or global) onto the .env base config.
- * `source` is "user" or "server" — recorded as _providerSource so token
- * accounting and error logging know which key paid for the turn.
- */
+/** Merge a provider config onto the base config. `source` is "user"|"server". */
 function mergeProvider(baseConfig, provider, source) {
   const merged = { ...baseConfig, _providerSource: source };
   merged.apiKey = provider.primary.apiKey;
@@ -730,10 +712,6 @@ async function streamChat(request, response, id, access) {
     "X-Content-Type-Options": "nosniff",
   });
   const controller = new AbortController();
-  // activeRuns stores { controller, intentional } so the catch handler can
-  // distinguish a deliberate user Stop (POST /stop → intentional=true) from an
-  // involuntary disconnect (client closed → response 'close' event). Both
-  // surface as AbortError, but only the former should be skipped from logging.
   activeRuns.set(id, { controller, intentional: false });
   let finished = false;
   const emit = (event) => {
@@ -757,12 +735,7 @@ async function streamChat(request, response, id, access) {
   });
 
   let result = null;
-  // Resolve provider config BEFORE the try block so it stays in scope inside
-  // the catch handler (for error logging). Previously `agentConfig` was a const
-  // inside try → ReferenceError in catch → silently swallowed by the logging
-  // try/catch → errors never made it to the admin log.
-  // Resolution covers 3 tiers: user BYOK → admin global → .env default.
-  // Anon skips tier 1 (no BYOK) but still benefits from the global provider.
+  // agentConfig must stay in scope for the catch handler (error logging).
   let agentConfig = config.deepseek;
   try {
     const resolved = await resolveProviderConfig(access.ownerId, config.deepseek);
@@ -782,17 +755,12 @@ async function streamChat(request, response, id, access) {
   } catch (error) {
     const isAbort = error.name === "AbortError";
     const run = activeRuns.get(id);
-    // An abort is "intentional" when the user clicked Stop (POST /stop set the
-    // flag). An abort WITHOUT the flag means the client disconnected mid-turn
-    // (network drop, tab closed, browser timeout) — that is a real failure from
-    // the user's perspective ("network error") and SHOULD be logged.
+    // intentional=true means the user clicked Stop; an abort without it is a
+    // network disconnect, which is a real failure worth logging.
     const intentionalStop = isAbort && Boolean(run?.intentional);
     const message = isAbort ? "Proses dihentikan" : error.message;
     emit({ type: "error", message });
-    // Log errors for admin observability, EXCEPT a deliberate user Stop.
-    // Network disconnects (unintentional abort) are logged as "Network" so
-    // admins can spot connectivity / long-running-turn issues.
-    // Best-effort: a logging failure must never break the chat flow.
+    // Log every failure except a deliberate Stop (best-effort, never throws).
     if (!intentionalStop) {
       try {
         const ctx = error._aiContext || {};

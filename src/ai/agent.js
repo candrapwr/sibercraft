@@ -13,6 +13,7 @@ Working rules:
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
 - Use grep to search for a pattern across the workspace (e.g. find where a class, function, or string is used, locate a definition, or check references before refactoring). It returns matches as path:line: match. Prefer grep over reading many files one by one.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
+- When calling write_file or edit_file, ALWAYS put "path" as the FIRST key in the JSON arguments object (e.g. {"path":"index.html","content":"..."}). The live preview needs the path before the content; if content comes first, the preview cannot update until the entire file has streamed and the user sees a frozen screen.
 - When you decide to call tools, always include a short natural-language progress note before or alongside the tool call so the assistant message content is never empty.
 - Produce responsive, high-quality results. Prefer semantic HTML, structured CSS, and browser-native JavaScript without a build step.
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
@@ -178,12 +179,8 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         if (call.name !== "write_file") return;
         const current = draftProgress.get(call.index) || { lastCheck: 0, lastContentLength: 0 };
         const now = Date.now();
-        // Throttle by TIME only. Each preview_draft sends the FULL file content
-        // (not a delta), and extractWriteFileDraft re-parses the whole JSON args
-        // string on every call — so emitting on every token would waste CPU and
-        // bandwidth on large files without visual benefit (the frontend already
-        // coalesces reloads to one per 200ms via DRAFT_INTERVAL). A short fixed
-        // cadence keeps the preview feeling live while bounding the work.
+        // Time-only throttle: preview_draft sends full content (not a delta),
+        // so emit at a fixed cadence rather than per-token.
         if (!force && now - current.lastCheck < 60) return;
         current.lastCheck = now;
         const draft = extractWriteFileDraft(call.arguments || "");
@@ -193,10 +190,8 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         }
         draftProgress.set(call.index, current);
       };
-      // edit_file isn't streamed (it needs the full old_string before applying),
-      // but we still want the drafting overlay to appear WHILE the model generates
-      // the arguments — not only after execution. Signal the target frame as soon
-      // as we can parse its path from the partial tool_call args, once per call.
+      // Signal the editing frame's path during arg streaming so the overlay
+      // shows up before edit_file finishes executing.
       const emitEditDraft = (call) => {
         if (call.name !== "edit_file") return;
         if (editSignaled.has(call.index)) return;
@@ -312,9 +307,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
     throw new Error(`Agent mencapai batas ${config.maxIterations} iterasi`);
   } catch (error) {
     await store.update(session.id, { status: "error" });
-    // Attach context for the error log (picked up by streamChat). iteration is
-    // the loop counter at the point of failure (0-based; null if pre-loop).
-    // modelsUsed.at(-1) is the model selected for the failing iteration.
+    // Attach context for the error log (picked up by streamChat).
     error._aiContext = {
       iteration: typeof iteration === "number" ? iteration : null,
       modelsUsed: modelsUsed.at(-1) || { model: config.model, mode: hasImages ? "multimodal" : "primary" },
@@ -363,13 +356,7 @@ export function extractWriteFileDraft(rawArguments) {
   return { path: path.value, content: content.value };
 }
 
-/**
- * Extract the target path from an edit_file tool call's (possibly partial) JSON
- * arguments. Unlike write_file, edit_file isn't previewable mid-stream, but we
- * only need the path to show the drafting overlay. Path is the first field in
- * the edit_file schema, so it parses early even while old_string is still being
- * generated.
- */
+/** Extract the target path from an edit_file tool call's (possibly partial) JSON. */
 export function extractEditFileDraftPath(rawArguments) {
   const path = extractJsonStringPrefix(rawArguments, "path");
   if (!path?.value || !isPreviewableDraftPath(path.value)) return null;
