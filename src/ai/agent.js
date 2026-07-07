@@ -172,6 +172,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       }
       const announcedToolCalls = new Set();
       const draftProgress = new Map();
+      const editSignaled = new Set();
       const emitWriteDraft = (call, force = false) => {
         if (call.name !== "write_file") return;
         const current = draftProgress.get(call.index) || { lastCheck: 0, lastRawLength: 0, lastContentLength: 0 };
@@ -187,6 +188,19 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         }
         draftProgress.set(call.index, current);
       };
+      // edit_file isn't streamed (it needs the full old_string before applying),
+      // but we still want the drafting overlay to appear WHILE the model generates
+      // the arguments — not only after execution. Signal the target frame as soon
+      // as we can parse its path from the partial tool_call args, once per call.
+      const emitEditDraft = (call) => {
+        if (call.name !== "edit_file") return;
+        if (editSignaled.has(call.index)) return;
+        const path = extractEditFileDraftPath(call.arguments || "");
+        if (path) {
+          editSignaled.add(call.index);
+          emit({ type: "frame_working", callIndex: call.index, path });
+        }
+      };
       const completion = await client.complete({
         messages,
         tools: conversational ? [] : tools.schemas,
@@ -201,6 +215,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
             emit({ type: "tool_start", callIndex: call.index, name: call.name });
           }
           emitWriteDraft(call);
+          emitEditDraft(call);
         },
       });
       usage = completion.usage || usage;
@@ -271,6 +286,11 @@ export async function runAgent({ session, store, prompt, images = [], config, we
           const draft = extractWriteFileDraft(args);
           if (draft) emit({ type: "preview_draft_clear", path: draft.path });
         }
+        // edit_file: clear the drafting overlay once the edit is applied.
+        if (name === "edit_file") {
+          const editedPath = extractEditFileDraftPath(args);
+          if (editedPath) emit({ type: "frame_working_clear", path: editedPath });
+        }
         const toolMessage = { role: "tool", tool_call_id: call.id, name, content: result };
         history.push(toolMessage);
         requestHistory.push(toolMessage);
@@ -336,6 +356,19 @@ export function extractWriteFileDraft(rawArguments) {
   const content = extractJsonStringPrefix(rawArguments, "content");
   if (!path?.complete || !content || !isPreviewableDraftPath(path.value)) return null;
   return { path: path.value, content: content.value };
+}
+
+/**
+ * Extract the target path from an edit_file tool call's (possibly partial) JSON
+ * arguments. Unlike write_file, edit_file isn't previewable mid-stream, but we
+ * only need the path to show the drafting overlay. Path is the first field in
+ * the edit_file schema, so it parses early even while old_string is still being
+ * generated.
+ */
+export function extractEditFileDraftPath(rawArguments) {
+  const path = extractJsonStringPrefix(rawArguments, "path");
+  if (!path?.value || !isPreviewableDraftPath(path.value)) return null;
+  return path.value;
 }
 
 function extractJsonStringPrefix(source, key) {
