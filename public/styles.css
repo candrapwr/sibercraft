@@ -149,6 +149,25 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .workspace-header { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 17px; border-bottom: 1px solid rgba(208,220,212,.12); background: rgba(9, 14, 12, .82); backdrop-filter: blur(14px); }
 .brand.compact .brand-mark { width: 28px; height: 28px; }.header-divider { width: 1px; height: 26px; margin: 0 6px; background: var(--line); }
 .workspace-identity strong { display: block; max-width: 340px; overflow: hidden; margin-top: 3px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+/* Inline project rename (workspace + canvas headers). Click the title to turn
+   it into a text input with save (✓) / cancel (✕) buttons. */
+.project-title-wrap { position: relative; min-width: 0; }
+.project-title { cursor: text; border-radius: 6px; transition: background .12s; outline-offset: 2px; }
+.project-title:hover { background: rgba(255,255,255,.07); }
+.project-title-wrap:not(.editable) .project-title { cursor: default; }
+.project-title-wrap:not(.editable) .project-title:hover { background: transparent; }
+.project-rename { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.project-rename[hidden] { display: none; }
+.project-rename-input { width: min(280px, 40vw); padding: 5px 8px; border: 1px solid rgba(122, 212, 159, .45); border-radius: 7px; outline: 0; color: #edf5ef; background: rgba(255,255,255,.06); font-size: 13px; font-family: inherit; }
+.project-rename-input:focus { box-shadow: 0 0 0 3px rgba(45,139,96,.18); }
+.project-rename-btn { flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; color: #e7efe8; background: rgba(255,255,255,.08); transition: background .12s; }
+.project-rename-btn:hover { background: rgba(255,255,255,.16); }
+.project-rename-btn.save { color: #7ad09f; }
+.project-rename-btn.save:hover { background: rgba(45,139,96,.22); }
+.project-rename-btn.cancel:hover { background: rgba(220,102,92,.18); color: #f0b4ad; }
+/* Canvas header variant: title sits inline, input replaces it in place. */
+.canvas-view-header .project-title-wrap { display: flex; align-items: center; gap: 6px; }
+.canvas-view-header .project-rename { margin-top: 0; }
 .icon-button, .header-button, .preview-toolbar button { border: 0; background: transparent; cursor: pointer; }
 .icon-button { width: 34px; height: 34px; border-radius: 9px; font-size: 19px; }.workspace-view .icon-button:hover, .workspace-view .header-button:hover { background: rgba(255,255,255,.08); }
 .icon-button.danger { color: #b8534b; font-size: 24px; }

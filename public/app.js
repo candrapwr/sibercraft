@@ -182,6 +182,9 @@ const translations = {
     exportZip: "Export assets (ZIP)",
     exportAll: "Export all assets (ZIP)",
     workspaceTitle: "{name} — SiberCraft",
+    clickToRename: "Click to rename project",
+    projectRenamed: "Project renamed",
+    projectNameRequired: "Project name cannot be empty",
     sessionsZero: "0 projects",
   },
   id: {
@@ -360,6 +363,9 @@ const translations = {
     exportZip: "Export aset (ZIP)",
     exportAll: "Export semua aset (ZIP)",
     workspaceTitle: "{name} — SiberCraft",
+    clickToRename: "Klik untuk mengganti nama project",
+    projectRenamed: "Nama project diperbarui",
+    projectNameRequired: "Nama project tidak boleh kosong",
     sessionsZero: "0 proyek",
   },
 };
@@ -390,6 +396,8 @@ const ui = {
   sessionsView: $("#sessionsView"), workspaceView: $("#workspaceView"), aiStatus: $("#aiStatus"),
   sessionGrid: $("#sessionGrid"), emptySessions: $("#emptySessions"), sessionCount: $("#sessionCount"),
   createDialog: $("#createDialog"), createForm: $("#createForm"), workspaceName: $("#workspaceName"),
+  projectRenameInput: $("#projectRenameInput"), projectRenameSave: $("#projectRenameSave"), projectRenameCancel: $("#projectRenameCancel"),
+  cvTitle: $("#cvTitle"), cvRenameInput: $("#cvRenameInput"), cvRenameSave: $("#cvRenameSave"), cvRenameCancel: $("#cvRenameCancel"),
   workspaceStatus: $("#workspaceStatus"), chatMessages: $("#chatMessages"),
   usageBadge: $("#usageBadge"), usagePrompt: $("#usagePrompt"), usageCompletion: $("#usageCompletion"),
   promptForm: $("#promptForm"), promptInput: $("#promptInput"), sendButton: $("#sendButton"),
@@ -986,6 +994,82 @@ async function enterApp() {
   }
 }
 
+// --- Inline project rename (workspace + canvas headers) -----------------
+// Click the project title → it becomes a text input with ✓ save / ✕ cancel.
+// Disabled for read-only projects (public projects owned by others).
+
+function setupProjectRename() {
+  // Workspace view.
+  bindRenameGroup(ui.workspaceName, ui.projectRenameInput, ui.projectRenameSave, ui.projectRenameCancel);
+  // Canvas view.
+  bindRenameGroup(ui.cvTitle, ui.cvRenameInput, ui.cvRenameSave, ui.cvRenameCancel);
+}
+
+function bindRenameGroup(titleEl, inputEl, saveEl, cancelEl) {
+  if (!titleEl || !inputEl || !saveEl || !cancelEl) return;
+  const wrap = titleEl.closest(".project-title-wrap");
+  titleEl.addEventListener("click", () => {
+    if (state.readOnly || !state.session) return;
+    enterRenameMode(titleEl, inputEl, wrap);
+  });
+  titleEl.addEventListener("keydown", (event) => {
+    if (state.readOnly || !state.session) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      enterRenameMode(titleEl, inputEl, wrap);
+    }
+  });
+  saveEl.addEventListener("click", () => commitRename(inputEl, wrap));
+  cancelEl.addEventListener("click", () => exitRenameMode(inputEl, wrap));
+  inputEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); commitRename(inputEl, wrap); }
+    else if (event.key === "Escape") { event.preventDefault(); exitRenameMode(inputEl, wrap); }
+  });
+  // Click outside the input while editing cancels.
+  inputEl.addEventListener("blur", () => {
+    if (!wrap.classList.contains("editing")) return;
+    // Defer so a click on ✓/✕ is processed first.
+    setTimeout(() => { if (!wrap.contains(document.activeElement)) exitRenameMode(inputEl, wrap); }, 150);
+  });
+}
+
+function enterRenameMode(titleEl, inputEl, wrap) {
+  inputEl.value = state.session.name || "";
+  wrap.classList.add("editing");
+  titleEl.hidden = true;
+  inputEl.parentElement.hidden = false;
+  inputEl.focus();
+  inputEl.select();
+}
+
+function exitRenameMode(inputEl, wrap) {
+  wrap.classList.remove("editing");
+  inputEl.parentElement.hidden = true;
+  const titleEl = wrap.querySelector(".project-title, #workspaceName, .cv-title");
+  if (titleEl) titleEl.hidden = false;
+}
+
+async function commitRename(inputEl, wrap) {
+  const name = inputEl.value.trim();
+  if (!name) { notify(t("projectNameRequired"), true); inputEl.focus(); return; }
+  if (name === state.session.name) { exitRenameMode(inputEl, wrap); return; }
+  if (!state.session?.id) return;
+  try {
+    const updated = await api(`/api/sessions/${state.session.id}/rename`, { method: "POST", body: { name } });
+    state.session.name = updated.name;
+    // Update both headers + document title so they stay in sync.
+    if (ui.workspaceName) ui.workspaceName.textContent = updated.name;
+    if (ui.cvTitle) ui.cvTitle.textContent = updated.name;
+    document.title = t("workspaceTitle", { name: updated.name });
+    exitRenameMode(inputEl, wrap);
+    notify(t("projectRenamed"));
+  } catch (error) {
+    notify(error.message, true);
+    inputEl.focus();
+    inputEl.select();
+  }
+}
+
 /** Ubah narasi heading sesuai konteks: login user vs anon. */
 function applySessionHeading() {
   const kicker = $(".section-heading .kicker");
@@ -1275,6 +1359,8 @@ function bindEvents() {
   ui.exportHtmlButton.addEventListener("click", exportSingleHtml);
   ui.exportImageButton.addEventListener("click", exportFullImage);
   $("#closeFilesButton").addEventListener("click", closeFiles);
+  // Inline project rename: clicking the title opens an input + ✓ save / ✕ cancel.
+  setupProjectRename();
   ui.undoButton.addEventListener("click", undoChange);
   $("#deleteButton").addEventListener("click", deleteSession);
   ui.panelResizeHandle.addEventListener("pointerdown", beginPanelResize);
@@ -1410,6 +1496,11 @@ function applyReadOnlyMode() {
   if (bannerText) bannerText.textContent = t("readOnlyBannerText");
   ui.workspaceMain?.classList.toggle("readonly-mode", readonly);
   ui.promptInput.placeholder = t(readonly ? "readOnlyPlaceholder" : "promptPlaceholder");
+  // Toggle editable state on the project title wraps (rename disabled for read-only).
+  const editable = !readonly && Boolean(state.session);
+  ui.workspaceName?.closest(".project-title-wrap")?.classList.toggle("editable", editable);
+  ui.cvTitle?.closest(".project-title-wrap")?.classList.toggle("editable", editable);
+  ui.workspaceName?.setAttribute("title", editable ? t("clickToRename") : "");
 }
 
 function renderAiStatus() {

@@ -228,7 +228,15 @@
         <button id="backButton" class="icon-button" title="Back to projects" aria-label="Back">←</button>
         <a class="brand compact" href="#"><span class="brand-mark">S</span></a>
         <span class="header-divider"></span>
-        <div><span class="header-label">PROJECT</span><strong id="workspaceName">Project</strong></div>
+        <div class="project-title-wrap">
+          <span class="header-label">PROJECT</span>
+          <strong id="workspaceName" class="project-title" tabindex="0" role="button" title="Click to rename">Project</strong>
+          <div class="project-rename" hidden>
+            <input id="projectRenameInput" class="project-rename-input" type="text" maxlength="80" autocomplete="off" aria-label="Project name">
+            <button id="projectRenameSave" class="project-rename-btn save" type="button" title="Save name" aria-label="Save name">✓</button>
+            <button id="projectRenameCancel" class="project-rename-btn cancel" type="button" title="Cancel" aria-label="Cancel rename">✕</button>
+          </div>
+        </div>
       </div>
       <div class="workspace-actions">
         <div class="language-switch" aria-label="Language switch">
@@ -321,7 +329,14 @@
     <header class="canvas-view-header">
       <button id="cvBackButton" class="icon-button" data-tip="Back to project" aria-label="Back">←</button>
       <span class="brand-mark">S</span>
-      <div class="cv-title" id="cvTitle">Canvas</div>
+      <div class="project-title-wrap">
+        <div class="cv-title" id="cvTitle" tabindex="0" role="button" title="Click to rename">Canvas</div>
+        <div class="project-rename" hidden>
+          <input id="cvRenameInput" class="project-rename-input" type="text" maxlength="80" autocomplete="off" aria-label="Project name">
+          <button id="cvRenameSave" class="project-rename-btn save" type="button" title="Save name" aria-label="Save name">✓</button>
+          <button id="cvRenameCancel" class="project-rename-btn cancel" type="button" title="Cancel" aria-label="Cancel rename">✕</button>
+        </div>
+      </div>
       <span class="cv-spacer"></span>
       <span id="cvUsageBadge" class="topbar-tokens" hidden data-tip="Token usage" data-tip-pos="bottom">
         <span id="cvUsagePrompt" class="token-prompt">0</span>

@@ -318,6 +318,16 @@ async function handleApi(request, response, url, user) {
     if (controller) controller.abort();
     return sendJson(response, 200, { stopped: Boolean(controller) });
   }
+  // Rename session. action = "rename"
+  if (method === "POST" && action === "rename") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Hentikan proses AI sebelum mengganti nama");
+    await store.getForEdit(id, access);
+    const body = await readJson(request);
+    const name = String(body?.name || "").trim().slice(0, 80);
+    if (!name) throw new HttpError(400, "Nama project wajib diisi");
+    const updated = await store.update(id, { name });
+    return sendJson(response, 200, updated);
+  }
   // Update frame position/device (drag persistence). action = "frame/:frameId"
   if (method === "PATCH" && action.startsWith("frame/")) {
     await store.getForEdit(id, access);
