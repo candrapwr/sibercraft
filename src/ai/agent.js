@@ -436,18 +436,16 @@ export function buildRuntimeVisualMessage(images) {
 export function selectTurnAi(config, session, hasImages) {
   if (hasImages) return { ...config.multimodal, mode: "multimodal" };
   // Model priority for text turns:
-  //   1. config.model from a user's private provider override (tagged via
-  //      _providerSource === "user") — the user explicitly chose this model,
-  //      so it MUST win over the session's server-default model.
-  //   2. session.model — the model the session was created with (server default).
-  //   3. config.model — the current server default.
-  // Without this, a user who sets "deepseek-chat" in their BYOK config would
-  // still be billed against the session's original "deepseek-v4-flash" model.
-  const userModel = config._providerSource === "user" ? config.model : null;
+  //   1. config.model from a user/global provider override (tagged via
+  //      _providerSource === "user" or "global") — the provider explicitly chose
+  //      this model, so it MUST win over the session's original model.
+  //   2. session.model — the model the session was created with.
+  //   3. config.model — the .env default (only when no override is active).
+  const overrideModel = (config._providerSource === "user" || config._providerSource === "global") ? config.model : null;
   return {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
-    model: userModel || session.model || config.model,
+    model: overrideModel || session.model || config.model,
     mode: "primary",
   };
 }

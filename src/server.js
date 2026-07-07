@@ -626,7 +626,7 @@ async function resolveProviderConfig(userId, baseConfig) {
   }
   const globalProvider = await providerStore.getGlobal();
   if (globalProvider.enabled && globalProvider.primary.apiKey) {
-    return { config: mergeProvider(baseConfig, globalProvider, "server"), providerSource: "server" };
+    return { config: mergeProvider(baseConfig, globalProvider, "global"), providerSource: "server" };
   }
   return { config: baseConfig, providerSource: "server" };
 }

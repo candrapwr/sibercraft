@@ -79,6 +79,35 @@ test("tanpa provider pribadi, session.model tetap dipakai (fallback)", () => {
   assert.equal(selectTurnAi(config, {}, false).model, "deepseek-v4-flash");
 });
 
+test("model global provider menang atas session.model (regresi bug global override)", () => {
+  // Admin set global provider dengan model "gpt-4o". Session dibuat dengan
+  // model default "deepseek-v4-flash". Global harus menang, bukan session.model.
+  // Sebelum fix: _providerSource "server" (global) tidak dianggap override →
+  // session.model "deepseek-v4-flash" dipakai → error MODEL_NOT_FOUND.
+  const config = {
+    apiKey: "global-key", baseUrl: "https://api.openai.com/v1", model: "gpt-4o",
+    _providerSource: "global",
+    multimodal: { apiKey: "", baseUrl: "", model: "" },
+  };
+  const session = { model: "deepseek-v4-flash" };
+  const ai = selectTurnAi(config, session, false);
+  assert.equal(ai.model, "gpt-4o", "model global harus menang atas session.model");
+  assert.equal(ai.apiKey, "global-key");
+  assert.equal(ai.baseUrl, "https://api.openai.com/v1");
+});
+
+test(".env default (tanpa override): session.model dipakai", () => {
+  // _providerSource "server" tanpa override global → session.model menang.
+  // Ini bedanya dengan "global": .env default TIDAK override session.model.
+  const config = {
+    apiKey: "env-key", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-v4-flash",
+    _providerSource: "server",
+    multimodal: { apiKey: "", baseUrl: "", model: "" },
+  };
+  const session = { model: "deepseek-chat" };
+  assert.equal(selectTurnAi(config, session, false).model, "deepseek-chat");
+});
+
 test("toModelMessage: assistant dengan tool call TANPA narasi → content null", () => {
   // Kasus model hanya kasih tool call, tidak ada narasi (content kosong).
   // Sebelum fix: content="" dikirim ulang → beberapa provider OpenAI-compatible reject.
