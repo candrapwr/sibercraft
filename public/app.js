@@ -2071,6 +2071,10 @@ async function stopAgent() {
 }
 
 function schedulePreview() {
+  // When the canvas is active, frames manage their own reloads (via
+  // onPreviewUpdate/onDraftUpdate). The workspace preview iframe only shows
+  // index.html, so reloading it here for a draft of another file spams 404s.
+  if (canvasView.isActive()) return;
   clearTimeout(state.previewTimer);
   clearTimeout(state.draftPreviewTimer);
   state.draftPreviewTimer = null;
@@ -2078,6 +2082,7 @@ function schedulePreview() {
 }
 
 function scheduleDraftPreview() {
+  if (canvasView.isActive()) return;
   const interval = 180;
   const elapsed = Date.now() - state.lastDraftPreviewAt;
   if (elapsed >= interval) {
@@ -2095,6 +2100,7 @@ function scheduleDraftPreview() {
 
 function refreshPreview({ silent = false } = {}) {
   if (!state.session) return;
+  if (canvasView.isActive()) return;
   if (!silent) ui.previewLoading.hidden = false;
   ui.previewFrame.src = previewUrl();
 }
