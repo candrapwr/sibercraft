@@ -35,6 +35,7 @@ import { buildVerificationEmail } from "./mail/verification-mail.js";
 import { deriveKey } from "./auth/crypto-secret.js";
 import { ProviderStore } from "./providers/provider-store.js";
 import { ErrorLogStore } from "./observability/error-log-store.js";
+import { classifyError } from "./observability/classify-error.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
@@ -705,12 +706,18 @@ async function streamChat(request, response, id, access) {
   });
 
   let result = null;
+  // Resolve provider config BEFORE the try block so it stays in scope inside
+  // the catch handler (for error logging). Previously `agentConfig` was a const
+  // inside try → ReferenceError in catch → silently swallowed by the logging
+  // try/catch → errors never made it to the admin log.
+  let agentConfig = config.deepseek;
   try {
     // Override default provider with the user's BYOK config if they enabled one.
     // Only applies to logged-in users; anon always uses the server default.
-    const { config: agentConfig } = access.ownerId && !access.ownerId.startsWith("anon-")
-      ? await resolveProviderConfig(access.ownerId, config.deepseek)
-      : { config: config.deepseek };
+    if (access.ownerId && !access.ownerId.startsWith("anon-")) {
+      const resolved = await resolveProviderConfig(access.ownerId, config.deepseek);
+      agentConfig = resolved.config;
+    }
     result = await runAgent({
       session,
       store,
@@ -1008,22 +1015,10 @@ function publicToolResult(name, result) {
 }
 
 /**
- * Categorize an AI error for the admin log. Order matters: structured fields
- * set by DeepSeekClient (error.status / error.errorType) win first, then we
- * inspect error.name and message substrings as a fallback.
+ * Categorize an AI error for the admin log. Implemented in
+ * ./observability/classify-error.js (imported above) so it can be unit-tested
+ * in isolation.
  */
-function classifyError(error) {
-  if (error?.errorType) return error.errorType; // "Server" | "HTTP" (set by deepseek.js)
-  if (error?.status >= 500) return "Server";
-  if (error?.status) return "HTTP";
-  const name = error?.name || "";
-  const msg = String(error?.message || "");
-  if (name === "AbortError") return "AbortError";
-  if (name === "TypeError") return "Network"; // fetch() failures (DNS, offline, timeout)
-  if (/belum dikonfigurasi/i.test(msg)) return "Config";
-  if (/mencapai batas .* iterasi/i.test(msg)) return "MaxIterations";
-  return "Unknown";
-}
 
 async function readJson(request, limit = 1_000_000) {
   let body = "";

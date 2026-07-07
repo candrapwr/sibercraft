@@ -262,6 +262,39 @@ npm test       # menjalankan test suite
 
 Secara default aplikasi berjalan di `http://localhost:3000`.
 
+### Struktur project
+
+```text
+.
+├── public/
+│   ├── index.html              # Shell UI browser
+│   ├── app.js                  # Orkestrasi UI utama
+│   ├── app-state.js            # State aplikasi dan registry elemen DOM
+│   ├── app-utils.js            # Utility frontend umum
+│   ├── i18n.js                 # Teks UI Inggris/Indonesia
+│   ├── canvas.js               # Engine infinite canvas
+│   ├── canvas-view.js          # Controller canvas workspace
+│   ├── tooltip.js              # Tooltip UI
+│   └── styles.css              # Styling aplikasi
+├── src/
+│   ├── server.js               # Entry point HTTP server dan routing API
+│   ├── ai/                     # Agent AI, client provider, optimasi konteks
+│   ├── auth/                   # Login, cookie sesi, password, user store, enkripsi secret
+│   ├── config/                 # Pembacaan .env dan konfigurasi aplikasi
+│   ├── db/                     # Inisialisasi SQLite dan migrasi schema
+│   ├── mail/                   # SMTP dan template email verifikasi
+│   ├── media/                  # Screenshot, thumbnail, dan capture website
+│   ├── observability/          # Penyimpanan log error AI untuk admin
+│   ├── providers/              # Konfigurasi BYOK provider AI per user
+│   └── workspace/              # Session, file tools, export, zip, sandbox path
+├── test/                       # Test suite Node.js bawaan
+├── scripts/
+│   └── seed-admin.js           # Bootstrap/reset akun admin
+├── data/                       # Data runtime lokal (terbentuk otomatis, tidak masuk git)
+├── package.json
+└── README.md
+```
+
 ### Konfigurasi (file `.env`)
 
 Salin `.env.example` menjadi `.env`, lalu sesuaikan. Bagian yang relevan dengan akun dan autentikasi:
