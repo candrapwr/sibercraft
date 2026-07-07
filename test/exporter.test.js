@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildStandaloneHtml } from "../src/exporter.js";
+import { buildStandaloneHtml } from "../src/workspace/exporter.js";
 
 test("export standalone menyatukan CSS, JavaScript, dan gambar lokal", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "sibercraft-export-"));

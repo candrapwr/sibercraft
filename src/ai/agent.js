@@ -1,4 +1,4 @@
-import { createFileTools } from "./file-tools.js";
+import { createFileTools } from "../workspace/file-tools.js";
 import { optimizeContext } from "./context-optimize.js";
 import { DeepSeekClient } from "./deepseek.js";
 

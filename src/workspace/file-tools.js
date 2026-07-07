@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
-import { captureWebpageScreenshot } from "./web-screenshot.js";
+import { captureWebpageScreenshot } from "../media/web-screenshot.js";
 
 export function createFileTools(workspaceDir, onMutation = () => {}, options = {}) {
   const tools = [

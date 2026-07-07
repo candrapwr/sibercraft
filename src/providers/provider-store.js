@@ -7,7 +7,7 @@
 // provider key (server-default usage is the operator's cost, not the user's,
 // and is intentionally not counted here). One row per user, upserted per turn.
 
-import { encryptSecret, decryptSecret, secretFingerprint } from "./crypto-secret.js";
+import { encryptSecret, decryptSecret, secretFingerprint } from "../auth/crypto-secret.js";
 
 const EMPTY_USAGE = {
   totalPromptTokens: 0,

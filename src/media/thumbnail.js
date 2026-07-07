@@ -14,7 +14,7 @@
 // and the caller is expected to swallow the error (best-effort).
 
 import { captureFullPage } from "./screenshot.js";
-import { frameDimensions } from "./session-store.js";
+import { frameDimensions } from "../workspace/session-store.js";
 
 // Output target size (longest side). The layout page is rendered at fit-all
 // scale, then Chrome captures it at the natural pixel size; we keep the

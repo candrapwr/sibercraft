@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { runMigrations } from "../src/db.js";
-import { UserStore, normalizeEmail } from "../src/auth-store.js";
+import { runMigrations } from "../src/db/db.js";
+import { UserStore, normalizeEmail } from "../src/auth/auth-store.js";
 
 async function freshStore() {
   const dir = await mkdtemp(join(tmpdir(), "sibercraft-auth-"));

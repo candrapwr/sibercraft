@@ -6,7 +6,7 @@ import {
   parseCookies,
   sessionCookieHeader,
   clearCookieHeader,
-} from "../src/session-cookie.js";
+} from "../src/auth/session-cookie.js";
 
 const SECRET = "super-secret-key";
 

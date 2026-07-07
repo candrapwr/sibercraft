@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { SessionStore } from "../src/session-store.js";
-import { resolveWithin } from "../src/path-sandbox.js";
+import { SessionStore } from "../src/workspace/session-store.js";
+import { resolveWithin } from "../src/workspace/path-sandbox.js";
 
 test("session menyimpan workspace, history, dan undo secara terpisah", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "forma-session-"));

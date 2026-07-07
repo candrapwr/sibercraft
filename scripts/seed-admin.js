@@ -11,10 +11,10 @@
  *
  * Aman untuk production bootstrap. Jalankan di server tempat .env & data/ berada.
  */
-import { config } from "../src/config.js";
-import { initDb } from "../src/db.js";
-import { UserStore, normalizeEmail } from "../src/auth-store.js";
-import { hashPassword } from "../src/password.js";
+import { config } from "../src/config/config.js";
+import { initDb } from "../src/db/db.js";
+import { UserStore, normalizeEmail } from "../src/auth/auth-store.js";
+import { hashPassword } from "../src/auth/password.js";
 import { createInterface } from "node:readline";
 import { writeFileSync, existsSync } from "node:fs";
 

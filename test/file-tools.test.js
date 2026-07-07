@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createFileTools } from "../src/file-tools.js";
+import { createFileTools } from "../src/workspace/file-tools.js";
 
 test("file tools menulis dan mengedit file serta melaporkan mutation", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "forma-tools-"));

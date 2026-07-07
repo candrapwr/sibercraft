@@ -4,9 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { runMigrations } from "../src/db.js";
-import { ProviderStore } from "../src/provider-store.js";
-import { deriveKey } from "../src/crypto-secret.js";
+import { runMigrations } from "../src/db/db.js";
+import { ProviderStore } from "../src/providers/provider-store.js";
+import { deriveKey } from "../src/auth/crypto-secret.js";
 
 const SECRET = "test-session-secret-for-provider-store";
 

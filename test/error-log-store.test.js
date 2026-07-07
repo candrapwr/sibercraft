@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { runMigrations } from "../src/db.js";
-import { ErrorLogStore } from "../src/error-log-store.js";
+import { runMigrations } from "../src/db/db.js";
+import { ErrorLogStore } from "../src/observability/error-log-store.js";
 
 async function freshStore(t) {
   const dir = await mkdtemp(join(tmpdir(), "sibercraft-errorlog-"));

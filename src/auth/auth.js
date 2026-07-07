@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { HttpError } from "./session-store.js";
+import { HttpError } from "../workspace/session-store.js";
 import {
   parseCookies,
   verifySessionToken,

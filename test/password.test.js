@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hashPassword, verifyPassword } from "../src/password.js";
+import { hashPassword, verifyPassword } from "../src/auth/password.js";
 
 test("hashPassword menghasilkan format scrypt$<salt>$<hash>", async () => {
   const hash = await hashPassword("rahasia123");

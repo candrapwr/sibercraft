@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveKey, encryptSecret, decryptSecret, secretFingerprint } from "../src/crypto-secret.js";
+import { deriveKey, encryptSecret, decryptSecret, secretFingerprint } from "../src/auth/crypto-secret.js";
 
 const SECRET = "super-secret-session-key";
 

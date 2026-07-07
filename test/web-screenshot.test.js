@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { captureWebpageScreenshot, validatePublicWebUrl } from "../src/web-screenshot.js";
+import { captureWebpageScreenshot, validatePublicWebUrl } from "../src/media/web-screenshot.js";
 
 test("validasi screenshot hanya menerima URL web publik", async () => {
   await assert.rejects(validatePublicWebUrl("http://localhost:3000"), /lokal\/private/);

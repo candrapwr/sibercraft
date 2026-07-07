@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optimizeContext, renderSignature } from "../src/context-optimize.js";
+import { optimizeContext, renderSignature } from "../src/ai/context-optimize.js";
 
 test("renderSignature merangkum argumen tool tanpa payload besar", () => {
   assert.equal(

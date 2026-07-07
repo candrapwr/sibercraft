@@ -4,8 +4,8 @@ import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runAgent } from "../src/agent.js";
-import { SessionStore } from "../src/session-store.js";
+import { runAgent } from "../src/ai/agent.js";
+import { SessionStore } from "../src/workspace/session-store.js";
 
 test("agent berpindah dari primary ke multimodal setelah tool screenshot", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "sibercraft-agent-route-"));

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildMimeMessage, encodeHeaderValue } from "../src/mail.js";
+import { buildMimeMessage, encodeHeaderValue } from "../src/mail/mail.js";
 
 test("buildMimeMessage mengandung header wajib MIME", () => {
   const mime = buildMimeMessage({

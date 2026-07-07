@@ -2,15 +2,15 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
-import { config } from "./config.js";
-import { isConversationalPrompt, runAgent } from "./agent.js";
-import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./exporter.js";
-import { HttpError, SessionStore } from "./session-store.js";
-import { resolveWithin } from "./path-sandbox.js";
-import { captureFullPage } from "./screenshot.js";
-import { generateThumbnail, buildLayoutHtml } from "./thumbnail.js";
-import { initDb } from "./db.js";
-import { UserStore } from "./auth-store.js";
+import { config } from "./config/config.js";
+import { isConversationalPrompt, runAgent } from "./ai/agent.js";
+import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./workspace/exporter.js";
+import { HttpError, SessionStore } from "./workspace/session-store.js";
+import { resolveWithin } from "./workspace/path-sandbox.js";
+import { captureFullPage } from "./media/screenshot.js";
+import { generateThumbnail, buildLayoutHtml } from "./media/thumbnail.js";
+import { initDb } from "./db/db.js";
+import { UserStore } from "./auth/auth-store.js";
 import {
   resolveUser,
   resolveOwner,
@@ -22,19 +22,19 @@ import {
   noteRegisterAttempt,
   noteLoginFailure,
   clearLoginFailures,
-} from "./auth.js";
-import { parseCookies } from "./session-cookie.js";
-import { hashPassword, verifyPassword } from "./password.js";
+} from "./auth/auth.js";
+import { parseCookies } from "./auth/session-cookie.js";
+import { hashPassword, verifyPassword } from "./auth/password.js";
 import {
   createSessionToken,
   sessionCookieHeader,
   clearCookieHeader,
-} from "./session-cookie.js";
-import { sendMail } from "./mail.js";
-import { buildVerificationEmail } from "./verification-mail.js";
-import { deriveKey } from "./crypto-secret.js";
-import { ProviderStore } from "./provider-store.js";
-import { ErrorLogStore } from "./error-log-store.js";
+} from "./auth/session-cookie.js";
+import { sendMail } from "./mail/mail.js";
+import { buildVerificationEmail } from "./mail/verification-mail.js";
+import { deriveKey } from "./auth/crypto-secret.js";
+import { ProviderStore } from "./providers/provider-store.js";
+import { ErrorLogStore } from "./observability/error-log-store.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);

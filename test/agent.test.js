@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi, toModelMessage } from "../src/agent.js";
+import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi, toModelMessage } from "../src/ai/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);

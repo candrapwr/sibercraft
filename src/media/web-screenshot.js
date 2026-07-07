@@ -3,7 +3,7 @@ import { lookup } from "node:dns/promises";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { dirname } from "node:path";
-import { resolveWithin } from "./path-sandbox.js";
+import { resolveWithin } from "../workspace/path-sandbox.js";
 
 const MAX_SCREENSHOT_BYTES = 4_000_000;
 

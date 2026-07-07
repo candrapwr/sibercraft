@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeLayoutBox, buildLayoutHtml } from "../src/thumbnail.js";
-import { frameDimensions, DEVICE_SIZE } from "../src/session-store.js";
+import { computeLayoutBox, buildLayoutHtml } from "../src/media/thumbnail.js";
+import { frameDimensions, DEVICE_SIZE } from "../src/workspace/session-store.js";
 
 test("frameDimensions mengembalikan ukuran pixel sesuai device", () => {
   assert.deepEqual(frameDimensions({ device: "desktop" }), DEVICE_SIZE.desktop);
