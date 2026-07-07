@@ -25,7 +25,11 @@ export class DeepSeekClient {
 
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 1500);
-      throw new Error(`Primary AI API ${response.status}: ${detail}`);
+      const error = new Error(`Primary AI API ${response.status}: ${detail}`);
+      // Attach structured metadata for error categorization (admin logs).
+      error.status = response.status;
+      error.errorType = response.status >= 500 ? "Server" : "HTTP";
+      throw error;
     }
     if (!response.body) throw new Error("Primary AI mengembalikan response kosong");
 

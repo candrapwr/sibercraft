@@ -80,26 +80,82 @@
       <div class="admin-brand"><span class="brand-mark">S</span><strong>SiberCraft</strong><small>Admin</small></div>
       <nav class="admin-nav">
         <button class="admin-nav-item active" type="button" data-admin-nav="users">◈ Users</button>
+        <button class="admin-nav-item" type="button" data-admin-nav="errors">⚠ Error logs</button>
       </nav>
       <button id="adminBackButton" class="admin-nav-item" type="button">← Back to app</button>
     </aside>
     <main class="admin-content">
-      <header class="admin-content-header">
-        <div><p class="kicker">MANAGEMENT</p><h2>User management</h2></div>
-        <div id="adminUserCount" class="admin-count"></div>
-      </header>
-      <div class="admin-table-wrap">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Email</th><th>Role</th><th>Tier</th><th>Status</th>
-              <th class="num">Projects</th><th>Created</th><th class="num">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="adminUserTableBody"></tbody>
-        </table>
+      <!-- Users panel -->
+      <div id="adminUsersPanel" class="admin-panel">
+        <header class="admin-content-header">
+          <div><p class="kicker">MANAGEMENT</p><h2>User management</h2></div>
+          <div id="adminUserCount" class="admin-count"></div>
+        </header>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Email</th><th>Role</th><th>Tier</th><th>Status</th>
+                <th class="num">Projects</th><th>Created</th><th class="num">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminUserTableBody"></tbody>
+          </table>
+        </div>
+        <div id="adminEmpty" class="admin-empty" hidden>No users found.</div>
       </div>
-      <div id="adminEmpty" class="admin-empty" hidden>No users found.</div>
+
+      <!-- Error logs panel -->
+      <div id="adminErrorsPanel" class="admin-panel" hidden>
+        <header class="admin-content-header">
+          <div><p class="kicker">OBSERVABILITY</p><h2>AI error logs</h2></div>
+          <div class="admin-content-actions">
+            <span id="adminErrorCount" class="admin-count"></span>
+            <button id="adminErrorClearAll" class="button button-ghost danger-ghost" type="button">Clear all</button>
+          </div>
+        </header>
+        <div class="admin-filters">
+          <label class="admin-filter"><span>Type</span>
+            <select id="adminErrorFilterType">
+              <option value="">All</option>
+              <option value="HTTP">HTTP (4xx)</option>
+              <option value="Server">Server (5xx)</option>
+              <option value="Network">Network</option>
+              <option value="Config">Config</option>
+              <option value="MaxIterations">Max iterations</option>
+              <option value="Unknown">Unknown</option>
+            </select>
+          </label>
+          <label class="admin-filter"><span>Time</span>
+            <select id="adminErrorFilterSince">
+              <option value="">All time</option>
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </label>
+          <label class="admin-filter admin-filter-grow"><span>Model or owner</span>
+            <input id="adminErrorFilterModel" type="search" placeholder="model name or owner id…" autocomplete="off">
+          </label>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-error-table">
+            <thead>
+              <tr>
+                <th>When</th><th>Model</th><th>Mode</th><th>Provider</th>
+                <th>Type</th><th>Owner</th><th class="num">Iter</th><th>Message</th><th class="num"></th>
+              </tr>
+            </thead>
+            <tbody id="adminErrorTableBody"></tbody>
+          </table>
+        </div>
+        <div id="adminErrorEmpty" class="admin-empty" hidden>No errors logged.</div>
+        <div id="adminErrorPager" class="admin-pager" hidden>
+          <button id="adminErrorPrev" class="button button-ghost" type="button" disabled>← Prev</button>
+          <span id="adminErrorPageInfo" class="admin-pager-info"></span>
+          <button id="adminErrorNext" class="button button-ghost" type="button" disabled>Next →</button>
+        </div>
+      </div>
     </main>
   </section>
 
@@ -196,9 +252,21 @@
         </div>
       </section>
 
+      <section id="myProjects" class="sessions-section my-projects-section" hidden>
+        <div class="section-heading">
+          <div><p class="kicker">YOUR PROJECTS</p><h2 id="myProjectsTitle">My projects</h2><p class="section-copy" id="myProjectsCopy">Projects you own — fully editable, with private history and resources.</p></div>
+          <div class="section-actions"><span id="myProjectsCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
+        </div>
+        <div id="myProjectsGrid" class="session-grid"></div>
+        <div id="emptyMyProjects" class="empty-sessions compact" hidden>
+          <div><p class="kicker">START CREATING</p><h3>Your first project is waiting.</h3><p>Describe the interface you want and let the AI prepare the files and live preview.</p></div>
+          <button class="button button-primary" data-create><span>＋</span>Create first project</button>
+        </div>
+      </section>
+
       <section id="recentSessions" class="sessions-section">
         <div class="section-heading">
-          <div><p class="kicker">YOUR PROJECTS</p><h2>Continue your projects</h2><p class="section-copy">All conversations, previews, and resources are stored per project.</p></div>
+          <div><p class="kicker" id="communityKicker">PUBLIC</p><h2 id="communityTitle">Public projects</h2><p class="section-copy">All conversations, previews, and resources are stored per project.</p></div>
           <div class="section-actions"><span id="sessionCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
         </div>
         <div id="guestNotice" class="guest-notice" hidden>

@@ -17,7 +17,7 @@ const translations = {
     continueWork: "Continue your projects",
     sectionCopy: "All conversations, previews, and resources are stored per project.",
     guestMode: "GUEST MODE",
-    guestHeading: "Community projects",
+    guestHeading: "Public projects",
     guestSectionCopy: "Browse public projects while you are in guest mode.",
     guestNoticeTitle: "Log in to use SiberCraft for free",
     guestNoticeBody: "Create and edit your own projects, save your work, and export results with the full free experience.",
@@ -29,9 +29,20 @@ const translations = {
     adminUserDeleted: "{email} and their projects deleted",
     adminDeleteTitle: "Delete {email}?",
     adminDeleteBody: "This will permanently delete the user and all {count} of their project(s). This cannot be undone.",
+    adminClearErrorsTitle: "Clear all error logs?",
+    adminClearErrorsBody: "This permanently deletes all {count} error log entries. This cannot be undone.",
+    adminClearConfirm: "Confirm",
+    adminErrorsCleared: "{count} error log entries cleared",
+    adminNoErrors: "No error logs to clear",
     yourWorkspaces: "YOUR WORKSPACES",
     startCreating: "START CREATING",
     sessionCount: "{count} projects",
+    myProjectsKicker: "YOUR PROJECTS",
+    myProjectsTitle: "My projects",
+    myProjectsCopy: "Projects you own — fully editable, with private history and resources.",
+    communityKicker: "PUBLIC",
+    communityTitle: "Public projects",
+    communityCount: "{count} projects",
     createNew: "Create new",
     createFirstSession: "Create first project",
     firstWorkspaceBody: "Describe the interface you want and let the AI prepare the files and live preview.",
@@ -198,8 +209,8 @@ const translations = {
     continueWork: "Lanjutkan proyek",
     sectionCopy: "Semua percakapan, preview, dan resource tersimpan sesuai proyeknya.",
     guestMode: "MODE TAMU",
-    guestHeading: "Proyek komunitas",
-    guestSectionCopy: "Anda sedang melihat proyek publik dalam mode tamu.",
+    guestHeading: "Project publik",
+    guestSectionCopy: "Anda sedang melihat project publik dalam mode tamu.",
     guestNoticeTitle: "Login untuk memakai SiberCraft gratis",
     guestNoticeBody: "Buat dan edit proyek sendiri, simpan pekerjaan, dan export hasil dengan akses penuh tanpa biaya.",
     guestNoticeAction: "Login gratis",
@@ -210,9 +221,20 @@ const translations = {
     adminUserDeleted: "{email} dan semua projectnya dihapus",
     adminDeleteTitle: "Hapus {email}?",
     adminDeleteBody: "Tindakan ini akan menghapus user dan semua {count} project-nya secara permanen. Tidak bisa dibatalkan.",
+    adminClearErrorsTitle: "Hapus semua log error?",
+    adminClearErrorsBody: "Tindakan ini menghapus semua {count} entri log error secara permanen. Tidak bisa dibatalkan.",
+    adminClearConfirm: "Konfirmasi",
+    adminErrorsCleared: "{count} entri log error dihapus",
+    adminNoErrors: "Tidak ada log error untuk dihapus",
     yourWorkspaces: "WORKSPACE ANDA",
     startCreating: "MULAI MEMBUAT",
     sessionCount: "{count} proyek",
+    myProjectsKicker: "PROJECT ANDA",
+    myProjectsTitle: "Project saya",
+    myProjectsCopy: "Project milik Anda — dapat diedit penuh, dengan riwayat dan resource privat.",
+    communityKicker: "PUBLIK",
+    communityTitle: "Project publik",
+    communityCount: "{count} proyek",
     createNew: "Buat baru",
     createFirstSession: "Buat proyek pertama",
     firstWorkspaceBody: "Jelaskan tampilan yang ingin dibuat dan biarkan AI menyiapkan file serta live preview-nya.",
@@ -395,6 +417,10 @@ const state = {
 const ui = {
   sessionsView: $("#sessionsView"), workspaceView: $("#workspaceView"), aiStatus: $("#aiStatus"),
   sessionGrid: $("#sessionGrid"), emptySessions: $("#emptySessions"), sessionCount: $("#sessionCount"),
+  myProjectsSection: $("#myProjects"), myProjectsGrid: $("#myProjectsGrid"),
+  myProjectsCount: $("#myProjectsCount"), emptyMyProjects: $("#emptyMyProjects"),
+  myProjectsTitle: $("#myProjectsTitle"), myProjectsCopy: $("#myProjectsCopy"),
+  communityTitle: $("#communityTitle"), communityKicker: $("#communityKicker"),
   createDialog: $("#createDialog"), createForm: $("#createForm"), workspaceName: $("#workspaceName"),
   projectRenameInput: $("#projectRenameInput"), projectRenameSave: $("#projectRenameSave"), projectRenameCancel: $("#projectRenameCancel"),
   cvTitle: $("#cvTitle"), cvRenameInput: $("#cvRenameInput"), cvRenameSave: $("#cvRenameSave"), cvRenameCancel: $("#cvRenameCancel"),
@@ -418,6 +444,13 @@ const ui = {
   adminConfirmDialog: $("#adminConfirmDialog"), adminConfirmTitle: $("#adminConfirmTitle"),
   adminConfirmBody: $("#adminConfirmBody"), adminConfirmOk: $("#adminConfirmOk"),
   adminConfirmCancel: $("#adminConfirmCancel"),
+  adminUsersPanel: $("#adminUsersPanel"), adminErrorsPanel: $("#adminErrorsPanel"),
+  adminErrorTableBody: $("#adminErrorTableBody"), adminErrorCount: $("#adminErrorCount"),
+  adminErrorEmpty: $("#adminErrorEmpty"), adminErrorFilterType: $("#adminErrorFilterType"),
+  adminErrorFilterSince: $("#adminErrorFilterSince"), adminErrorFilterModel: $("#adminErrorFilterModel"),
+  adminErrorClearAll: $("#adminErrorClearAll"), adminErrorPager: $("#adminErrorPager"),
+  adminErrorPrev: $("#adminErrorPrev"), adminErrorNext: $("#adminErrorNext"),
+  adminErrorPageInfo: $("#adminErrorPageInfo"),
   authView: $("#authView"), loginForm: $("#loginForm"), registerForm: $("#registerForm"),
   authTabLogin: $("#authTabLogin"), authTabRegister: $("#authTabRegister"),
   authTabs: $("#authTabs"), loginNotice: $("#loginNotice"),
@@ -524,9 +557,15 @@ function applyStaticText() {
   $(".product-composer span").textContent = state.language === "id" ? "Jelaskan perubahan..." : "Describe the changes...";
   $(".floating-chip.chip-top").lastChild.textContent = ` ${t("generatingUi")}`;
   $(".floating-chip.chip-bottom").lastChild.textContent = ` ${t("previewUpdated")}`;
-  $(".section-heading .kicker").textContent = t("yourWorkspaces");
-  $(".section-heading h2").textContent = t("continueWork");
-  $(".section-copy").textContent = t("sectionCopy");
+  // Landing sections: "My projects" (logged-in) + "Public projects".
+  if (ui.myProjectsTitle) ui.myProjectsTitle.textContent = t("myProjectsTitle");
+  if (ui.myProjectsCopy) ui.myProjectsCopy.textContent = t("myProjectsCopy");
+  if (ui.communityTitle) ui.communityTitle.textContent = t("communityTitle");
+  if (ui.communityKicker) ui.communityKicker.textContent = t("communityKicker");
+  $("#myProjects .kicker").textContent = t("myProjectsKicker");
+  // Legacy generic selector kept for sections without explicit IDs.
+  const communityCopy = $("#recentSessions .section-copy");
+  if (communityCopy) communityCopy.textContent = t("sectionCopy");
   ui.guestNoticeTitle.textContent = t("guestNoticeTitle");
   ui.guestNoticeBody.textContent = t("guestNoticeBody");
   ui.guestNoticeLoginButton.textContent = t("guestNoticeAction");
@@ -1070,21 +1109,22 @@ async function commitRename(inputEl, wrap) {
   }
 }
 
-/** Ubah narasi heading sesuai konteks: login user vs anon. */
+/** Ubah narasi heading community section sesuai konteks: login user vs anon. */
 function applySessionHeading() {
-  const kicker = $(".section-heading .kicker");
-  const heading = $(".section-heading h2");
-  const copy = $(".section-copy");
-  if (!kicker || !heading || !copy) return;
+  // Target the community section explicitly (My projects has its own labels).
+  const kicker = $("#communityKicker") || $("#recentSessions .section-heading .kicker");
+  const heading = $("#communityTitle") || $("#recentSessions .section-heading h2");
+  const copy = $("#recentSessions .section-copy");
+  if (!kicker || !heading) return;
   if (state.user) {
-    kicker.textContent = t("yourWorkspaces");
-    heading.textContent = t("continueWork");
-    copy.textContent = t("sectionCopy");
+    kicker.textContent = t("communityKicker");
+    heading.textContent = t("communityTitle");
+    if (copy) copy.textContent = t("sectionCopy");
     ui.guestNotice.hidden = true;
   } else {
     kicker.textContent = t("guestMode");
     heading.textContent = t("guestHeading");
-    copy.textContent = t("guestSectionCopy");
+    if (copy) copy.textContent = t("guestSectionCopy");
     ui.guestNotice.hidden = false;
   }
 }
@@ -1121,6 +1161,7 @@ function toggleUserMenu(open) {
 
 /* ===== Admin panel ===== */
 let adminUsers = [];
+let adminErrorState = { logs: [], total: 0, limit: 50, offset: 0, filters: { errorType: "", since: "", model: "" } };
 
 async function showAdminView() {
   if (!state.user || state.user.role !== "admin") {
@@ -1132,7 +1173,10 @@ async function showAdminView() {
   ui.adminView.hidden = false;
   document.title = "Admin — SiberCraft";
   toggleUserMenu(false);
-  await loadAdminUsers();
+  // Load whichever admin tab is currently active (default: users).
+  const activeTab = document.querySelector("[data-admin-nav].active")?.dataset.adminNav || "users";
+  if (activeTab === "errors") await loadAdminErrors();
+  else await loadAdminUsers();
 }
 
 async function loadAdminUsers() {
@@ -1150,6 +1194,157 @@ function formatAdminDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(state.language === "id" ? "id-ID" : "en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+// Switch between admin panels (Users / Error logs). Toggles nav active state,
+// shows/hides the corresponding panel, and loads its data.
+function switchAdminTab(name) {
+  if (name !== "users" && name !== "errors") return;
+  $$("[data-admin-nav]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminNav === name);
+  });
+  ui.adminUsersPanel.hidden = name !== "users";
+  ui.adminErrorsPanel.hidden = name !== "errors";
+  if (name === "errors" && adminErrorState.logs.length === 0) loadAdminErrors();
+  if (name === "users") loadAdminUsers();
+}
+
+// Compute the `since` ISO cutoff from a time-range label (today/7d/30d).
+function errorSinceIso(label) {
+  if (!label) return undefined;
+  const now = Date.now();
+  if (label === "today") return new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+  if (label === "7d") return new Date(now - 7 * 86400_000).toISOString();
+  if (label === "30d") return new Date(now - 30 * 86400_000).toISOString();
+  return undefined;
+}
+
+async function loadAdminErrors() {
+  const { limit, offset, filters } = adminErrorState;
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  // The model filter also accepts owner ids — backend matches model by substring
+  // and owner by exact value, so we send both fields and let either match.
+  if (filters.errorType) params.set("errorType", filters.errorType);
+  if (filters.since) {
+    const since = errorSinceIso(filters.since);
+    if (since) params.set("since", since);
+  }
+  if (filters.model) params.set("model", filters.model);
+  try {
+    const data = await api(`/api/admin/errors?${params}`);
+    adminErrorState.logs = data.logs || [];
+    adminErrorState.total = data.total || 0;
+    renderAdminErrors();
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
+function renderAdminErrors() {
+  const body = ui.adminErrorTableBody;
+  if (!body) return;
+  body.replaceChildren();
+  ui.adminErrorCount.textContent = `${adminErrorState.total} ${adminErrorState.total === 1 ? "entry" : "entries"}`;
+  ui.adminErrorEmpty.hidden = adminErrorState.logs.length > 0;
+  // Pager
+  const { limit, offset, total } = adminErrorState;
+  const showPager = total > limit;
+  ui.adminErrorPager.hidden = !showPager;
+  if (showPager) {
+    ui.adminErrorPrev.disabled = offset === 0;
+    ui.adminErrorNext.disabled = offset + limit >= total;
+    const from = offset + 1;
+    const to = Math.min(offset + limit, total);
+    ui.adminErrorPageInfo.textContent = `${from}–${to} of ${total}`;
+  }
+  for (const log of adminErrorState.logs) body.append(renderErrorLogRow(log));
+}
+
+function renderErrorLogRow(log) {
+  const tr = document.createElement("tr");
+  const when = document.createElement("td");
+  when.textContent = formatAdminDateTime(log.createdAt);
+  const model = document.createElement("td");
+  model.textContent = log.model || "—";
+  model.title = log.model || "";
+  const mode = document.createElement("td");
+  mode.textContent = log.mode || "—";
+  const provider = document.createElement("td");
+  provider.textContent = log.providerSource === "user" ? "BYOK" : "server";
+  const type = document.createElement("td");
+  const badge = document.createElement("span");
+  badge.className = `err-badge err-${(log.errorType || "unknown").toLowerCase()}`;
+  badge.textContent = log.errorType || "Unknown";
+  type.append(badge);
+  const owner = document.createElement("td");
+  owner.textContent = log.ownerId ? (log.ownerId.startsWith("anon-") ? "anon" : log.ownerId.slice(0, 8)) : "—";
+  owner.title = log.ownerId || "";
+  const iter = document.createElement("td");
+  iter.className = "num";
+  iter.textContent = log.iteration == null ? "—" : String(log.iteration);
+  const msg = document.createElement("td");
+  msg.className = "err-message";
+  const msgText = document.createElement("span");
+  msgText.textContent = log.errorMessage || "";
+  msgText.title = log.errorMessage || "";
+  msg.append(msgText);
+  if (log.sessionId) {
+    const link = document.createElement("a");
+    link.href = `#session=${log.sessionId}`;
+    link.className = "err-session-link";
+    link.textContent = "open";
+    link.title = "Open session";
+    msg.append(link);
+  }
+  const actions = document.createElement("td");
+  actions.className = "num";
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "admin-row-delete";
+  del.textContent = "×";
+  del.title = "Delete this entry";
+  del.setAttribute("aria-label", "Delete error log entry");
+  del.addEventListener("click", async () => {
+    del.disabled = true;
+    try {
+      await api(`/api/admin/errors/${log.id}`, { method: "DELETE" });
+      adminErrorState.logs = adminErrorState.logs.filter((x) => x.id !== log.id);
+      adminErrorState.total = Math.max(0, adminErrorState.total - 1);
+      renderAdminErrors();
+    } catch (error) {
+      del.disabled = false;
+      notify(error.message, true);
+    }
+  });
+  actions.append(del);
+  tr.append(when, model, mode, provider, type, owner, iter, msg, actions);
+  return tr;
+}
+
+function confirmClearAllErrors() {
+  if (adminErrorState.total === 0) { notify(t("adminNoErrors")); return; }
+  pendingAdminAction = { kind: "clear-errors" };
+  ui.adminConfirmTitle.textContent = t("adminClearErrorsTitle");
+  ui.adminConfirmBody.textContent = t("adminClearErrorsBody", { count: adminErrorState.total });
+  ui.adminConfirmOk.textContent = t("adminClearConfirm");
+  ui.adminConfirmDialog.showModal();
+}
+
+/** Date+time format for error log timestamps (more precise than date-only). */
+function formatAdminDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const locale = state.language === "id" ? "id-ID" : "en-US";
+  return d.toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
 }
 
 function renderAdminUsers() {
@@ -1222,15 +1417,34 @@ async function adminActivateUser(u) {
 }
 
 let pendingDeleteUser = null;
+// Generic pending action for the admin confirm dialog (e.g. clear error logs).
+let pendingAdminAction = null;
 
 function adminConfirmDelete(u) {
   pendingDeleteUser = u;
   ui.adminConfirmTitle.textContent = t("adminDeleteTitle", { email: u.email });
   ui.adminConfirmBody.textContent = t("adminDeleteBody", { count: u.projectCount ?? 0 });
+  ui.adminConfirmOk.textContent = t("adminClearConfirm");
   ui.adminConfirmDialog.showModal();
 }
 
 async function executeAdminDelete() {
+  // Dispatch by pending action kind.
+  if (pendingAdminAction?.kind === "clear-errors") {
+    const action = pendingAdminAction;
+    pendingAdminAction = null;
+    ui.adminConfirmDialog.close();
+    try {
+      const result = await api("/api/admin/errors", { method: "DELETE" });
+      adminErrorState.logs = [];
+      adminErrorState.total = 0;
+      renderAdminErrors();
+      notify(t("adminErrorsCleared", { count: result.removed || 0 }));
+    } catch (error) {
+      notify(error.message, true);
+    }
+    return;
+  }
   const u = pendingDeleteUser;
   if (!u) return;
   ui.adminConfirmDialog.close();
@@ -1304,9 +1518,20 @@ function bindEvents() {
     }
   });
   ui.adminConfirmOk.addEventListener("click", executeAdminDelete);
-  ui.adminConfirmCancel.addEventListener("click", () => { pendingDeleteUser = null; ui.adminConfirmDialog.close(); });
+  ui.adminConfirmCancel.addEventListener("click", () => { pendingDeleteUser = null; pendingAdminAction = null; ui.adminConfirmDialog.close(); });
   // Tutup dialog via Escape/backdrop bawaan tetap membatalkan.
-  ui.adminConfirmDialog.addEventListener("close", () => { pendingDeleteUser = null; });
+  ui.adminConfirmDialog.addEventListener("close", () => { pendingDeleteUser = null; pendingAdminAction = null; });
+  // Admin tab switching: Users / Error logs.
+  $$("[data-admin-nav]").forEach((button) => {
+    button.addEventListener("click", () => switchAdminTab(button.dataset.adminNav));
+  });
+  // Error log filters + pagination + actions.
+  ui.adminErrorFilterType?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });
+  ui.adminErrorFilterSince?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });
+  ui.adminErrorFilterModel?.addEventListener("input", debounce(() => { adminErrorState.offset = 0; loadAdminErrors(); }, 350));
+  ui.adminErrorPrev?.addEventListener("click", () => { adminErrorState.offset = Math.max(0, adminErrorState.offset - adminErrorState.limit); loadAdminErrors(); });
+  ui.adminErrorNext?.addEventListener("click", () => { adminErrorState.offset += adminErrorState.limit; loadAdminErrors(); });
+  ui.adminErrorClearAll?.addEventListener("click", () => confirmClearAllErrors());
   ui.headerLoginButton.addEventListener("click", () => showAuthView("login"));
   ui.guestNoticeLoginButton.addEventListener("click", () => showAuthView("login"));
   ui.closeAuthButton.addEventListener("click", () => closeAuthView().catch((error) => notify(error.message, true)));
@@ -1540,77 +1765,114 @@ function resetTurnUsageDisplay() {
 }
 
 function renderSessions() {
-  ui.sessionGrid.replaceChildren();
-  ui.sessionCount.textContent = state.sessions.length ? t("sessionCount", { count: state.sessions.length }) : t("sessionsZero");
-  ui.emptySessions.hidden = state.sessions.length > 0;
-  ui.sessionGrid.hidden = state.sessions.length === 0;
-  for (const session of state.sessions) {
-    const card = document.createElement("article");
-    card.className = "session-card";
-    card.tabIndex = 0;
-    const preview = document.createElement("div");
-    preview.className = "session-preview";
-    const frameCount = Array.isArray(session.frames) ? session.frames.length : 0;
-    const previewIcon = document.createElement("div");
-    previewIcon.className = "session-preview-icon";
-    previewIcon.innerHTML = `<span class="preview-grid"></span><b>${frameCount}</b><small>${frameCount === 1 ? "frame" : "frames"}</small>`;
-    const previewBadge = document.createElement("span");
-    previewBadge.className = "session-preview-badge";
-    previewBadge.textContent = session.template === "dashboard" ? t("dashboard") : t("blankCanvas");
-    preview.append(previewIcon, previewBadge);
-    // Thumbnail (best-effort): bila tersedia, tampil di atas ikon grid.
-    // Fallback bila 404 (belum digenerate / Chrome tidak ada) → biarkan ikon grid.
-    if (frameCount > 0) {
-      const thumb = document.createElement("img");
-      thumb.className = "session-thumb";
-      thumb.alt = "";
-      thumb.decoding = "async";
-      // Pakai opacity (bukan hidden) supaya <img> langsung trigger load
-      // dan tidak dianggap "below fold" oleh lazy-load heuristic.
-      thumb.style.opacity = "0";
-      thumb.src = `/api/sessions/${session.id}/thumbnail?v=${encodeURIComponent(session.updatedAt || "")}`;
-      thumb.addEventListener("load", () => {
-        if (thumb.naturalWidth > 0 && thumb.naturalHeight > 0) {
-          thumb.style.opacity = "1";
-          previewIcon.remove();
-        } else {
-          thumb.remove();
-        }
-      });
-      thumb.addEventListener("error", () => thumb.remove());
-      preview.append(thumb);
-    }
-    const meta = document.createElement("div");
-    meta.className = "session-meta";
-    const copy = document.createElement("div");
-    const title = document.createElement("h3"); title.textContent = session.name;
-    const date = document.createElement("p"); date.textContent = t("editedAt", { date: formatDate(session.updatedAt), count: session.checkpointCount || 0 });
-    copy.append(title, date);
-    const arrow = document.createElement("span"); arrow.className = "card-arrow"; arrow.textContent = "→";
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "session-delete";
-    remove.textContent = "×";
-    remove.title = `${t("deleteTitle")} ${session.name}`;
-    remove.setAttribute("aria-label", `${t("deleteTitle")} ${session.name}`);
-    remove.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      remove.disabled = true;
-      try {
-        const deleted = await deleteSessionRecord(session);
-        if (deleted) notify(t("sessionDeleted"));
-      } catch (error) {
-        remove.disabled = false;
-        notify(error.message, true);
+  // For logged-in users, split into two groups: their own projects (shown in a
+  // dedicated "My projects" section on top) and the rest (community gallery).
+  // Anonymous users see everything in one grid, as before.
+  const isLoggedIn = Boolean(state.user);
+  const myProjects = isLoggedIn
+    ? state.sessions.filter((s) => s.ownerId && s.ownerId === state.ownerId)
+    : [];
+  const community = isLoggedIn
+    ? state.sessions.filter((s) => !(s.ownerId && s.ownerId === state.ownerId))
+    : state.sessions;
+
+  if (isLoggedIn) {
+    renderSessionGrid(ui.myProjectsGrid, ui.emptyMyProjects, ui.myProjectsCount, myProjects, false);
+    renderSessionGrid(ui.sessionGrid, ui.emptySessions, ui.sessionCount, community, true);
+    ui.myProjectsSection.hidden = false;
+  } else {
+    // Anonymous: hide "My projects" section, show everything in community grid.
+    ui.myProjectsSection.hidden = true;
+    renderSessionGrid(ui.sessionGrid, ui.emptySessions, ui.sessionCount, state.sessions, false);
+  }
+}
+
+/**
+ * Render a list of sessions into a grid element.
+ * @param grid       The .session-grid container.
+ * @param emptyEl    The empty-state element to toggle.
+ * @param countEl    The count label element.
+ * @param sessions   Sessions to render.
+ * @param community  True when rendering the community gallery (controls heading labels).
+ */
+function renderSessionGrid(grid, emptyEl, countEl, sessions, community) {
+  if (!grid) return;
+  grid.replaceChildren();
+  if (countEl) {
+    const label = community ? "communityCount" : "sessionCount";
+    countEl.textContent = sessions.length ? t(label, { count: sessions.length }) : t("sessionsZero");
+  }
+  if (emptyEl) emptyEl.hidden = sessions.length > 0;
+  grid.hidden = sessions.length === 0;
+  for (const session of sessions) grid.append(renderSessionCard(session));
+}
+
+function renderSessionCard(session) {
+  const card = document.createElement("article");
+  card.className = "session-card";
+  card.tabIndex = 0;
+  const preview = document.createElement("div");
+  preview.className = "session-preview";
+  const frameCount = Array.isArray(session.frames) ? session.frames.length : 0;
+  const previewIcon = document.createElement("div");
+  previewIcon.className = "session-preview-icon";
+  previewIcon.innerHTML = `<span class="preview-grid"></span><b>${frameCount}</b><small>${frameCount === 1 ? "frame" : "frames"}</small>`;
+  const previewBadge = document.createElement("span");
+  previewBadge.className = "session-preview-badge";
+  previewBadge.textContent = session.template === "dashboard" ? t("dashboard") : t("blankCanvas");
+  preview.append(previewIcon, previewBadge);
+  // Thumbnail (best-effort): bila tersedia, tampil di atas ikon grid.
+  // Fallback bila 404 (belum digenerate / Chrome tidak ada) → biarkan ikon grid.
+  if (frameCount > 0) {
+    const thumb = document.createElement("img");
+    thumb.className = "session-thumb";
+    thumb.alt = "";
+    thumb.decoding = "async";
+    // Pakai opacity (bukan hidden) supaya <img> langsung trigger load
+    // dan tidak dianggap "below fold" oleh lazy-load heuristic.
+    thumb.style.opacity = "0";
+    thumb.src = `/api/sessions/${session.id}/thumbnail?v=${encodeURIComponent(session.updatedAt || "")}`;
+    thumb.addEventListener("load", () => {
+      if (thumb.naturalWidth > 0 && thumb.naturalHeight > 0) {
+        thumb.style.opacity = "1";
+        previewIcon.remove();
+      } else {
+        thumb.remove();
       }
     });
-    remove.addEventListener("keydown", (event) => event.stopPropagation());
-    meta.append(copy, arrow); card.append(preview, meta, remove);
-    const open = () => { location.hash = `session=${session.id}`; };
-    card.addEventListener("click", open);
-    card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
-    ui.sessionGrid.append(card);
+    thumb.addEventListener("error", () => thumb.remove());
+    preview.append(thumb);
   }
+  const meta = document.createElement("div");
+  meta.className = "session-meta";
+  const copy = document.createElement("div");
+  const title = document.createElement("h3"); title.textContent = session.name;
+  const date = document.createElement("p"); date.textContent = t("editedAt", { date: formatDate(session.updatedAt), count: session.checkpointCount || 0 });
+  copy.append(title, date);
+  const arrow = document.createElement("span"); arrow.className = "card-arrow"; arrow.textContent = "→";
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "session-delete";
+  remove.textContent = "×";
+  remove.title = `${t("deleteTitle")} ${session.name}`;
+  remove.setAttribute("aria-label", `${t("deleteTitle")} ${session.name}`);
+  remove.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    remove.disabled = true;
+    try {
+      const deleted = await deleteSessionRecord(session);
+      if (deleted) notify(t("sessionDeleted"));
+    } catch (error) {
+      remove.disabled = false;
+      notify(error.message, true);
+    }
+  });
+  remove.addEventListener("keydown", (event) => event.stopPropagation());
+  meta.append(copy, arrow); card.append(preview, meta, remove);
+  const open = () => { location.hash = `session=${session.id}`; };
+  card.addEventListener("click", open);
+  card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+  return card;
 }
 
 function openCreateDialog() {

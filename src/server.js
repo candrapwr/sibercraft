@@ -34,6 +34,7 @@ import { sendMail } from "./mail.js";
 import { buildVerificationEmail } from "./verification-mail.js";
 import { deriveKey } from "./crypto-secret.js";
 import { ProviderStore } from "./provider-store.js";
+import { ErrorLogStore } from "./error-log-store.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
@@ -45,6 +46,7 @@ const userStore = new UserStore(db);
 // keys become undecryptable after a restart (treated gracefully as "missing").
 const cryptoKey = await deriveKey(config.auth.secret);
 const providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
+const errorLogStore = new ErrorLogStore(db);
 if (!process.env.SESSION_SECRET?.trim()) {
   console.warn("SESSION_SECRET belum diatur: API key pengguna tidak akan survive restart server.");
 }
@@ -149,6 +151,37 @@ async function handleApi(request, response, url, user) {
       projectCount: await store.countByOwner(u.id),
     })));
     return sendJson(response, 200, enriched);
+  }
+  // --- Admin error log routes (wajib admin) ---
+  if (url.pathname === "/api/admin/errors") {
+    requireAdmin(user);
+    if (method === "GET") {
+      const limit = url.searchParams.get("limit");
+      const offset = url.searchParams.get("offset");
+      const filters = {
+        limit: limit ? Number.parseInt(limit, 10) : 50,
+        offset: offset ? Number.parseInt(offset, 10) : 0,
+        model: url.searchParams.get("model") || undefined,
+        ownerId: url.searchParams.get("ownerId") || undefined,
+        errorType: url.searchParams.get("errorType") || undefined,
+        since: url.searchParams.get("since") || undefined,
+      };
+      const logs = errorLogStore.list(filters);
+      const total = errorLogStore.count(filters);
+      return sendJson(response, 200, { logs, total, limit: filters.limit, offset: filters.offset });
+    }
+    if (method === "DELETE") {
+      const removed = errorLogStore.clearAll();
+      return sendJson(response, 200, { ok: true, removed });
+    }
+    throw new HttpError(405, "Method tidak diizinkan");
+  }
+  if (url.pathname.startsWith("/api/admin/errors/") && method === "DELETE") {
+    requireAdmin(user);
+    const id = url.pathname.slice("/api/admin/errors/".length);
+    const deleted = errorLogStore.delete(id);
+    if (!deleted) throw new HttpError(404, "Log tidak ditemukan");
+    return sendJson(response, 200, { ok: true });
   }
 
   // --- Session routes: login ATAU anon (resolve owner dari cookie user/anon) ---
@@ -691,8 +724,31 @@ async function streamChat(request, response, id, access) {
     });
     if (checkpoint && !result?.mutated) await store.discardCheckpoint(id, checkpoint);
   } catch (error) {
-    const message = error.name === "AbortError" ? "Proses dihentikan" : error.message;
+    const isAbort = error.name === "AbortError";
+    const message = isAbort ? "Proses dihentikan" : error.message;
     emit({ type: "error", message });
+    // Log non-abort AI errors for admin observability. AbortError is a user
+    // action (Stop), not a real failure, so it is intentionally excluded.
+    // Best-effort: a logging failure must never break the chat flow.
+    if (!isAbort) {
+      try {
+        const ctx = error._aiContext || {};
+        const model = ctx.modelsUsed?.model || agentConfig.model;
+        const mode = ctx.modelsUsed?.mode || (imagePayloads.length ? "multimodal" : "primary");
+        errorLogStore.log({
+          sessionId: id,
+          ownerId: access.ownerId,
+          model,
+          providerSource: agentConfig._providerSource || "server",
+          mode,
+          errorMessage: error.message,
+          errorType: classifyError(error),
+          iteration: ctx.iteration ?? null,
+        });
+      } catch {
+        // Swallow logging errors — chat must not break.
+      }
+    }
   } finally {
     finished = true;
     activeRuns.delete(id);
@@ -949,6 +1005,24 @@ function publicToolResult(name, result) {
   if (name === "read_file") return "File berhasil dibaca";
   if (name === "list_dir") return "Struktur workspace diperiksa";
   return result.slice(0, 160);
+}
+
+/**
+ * Categorize an AI error for the admin log. Order matters: structured fields
+ * set by DeepSeekClient (error.status / error.errorType) win first, then we
+ * inspect error.name and message substrings as a fallback.
+ */
+function classifyError(error) {
+  if (error?.errorType) return error.errorType; // "Server" | "HTTP" (set by deepseek.js)
+  if (error?.status >= 500) return "Server";
+  if (error?.status) return "HTTP";
+  const name = error?.name || "";
+  const msg = String(error?.message || "");
+  if (name === "AbortError") return "AbortError";
+  if (name === "TypeError") return "Network"; // fetch() failures (DNS, offline, timeout)
+  if (/belum dikonfigurasi/i.test(msg)) return "Config";
+  if (/mencapai batas .* iterasi/i.test(msg)) return "MaxIterations";
+  return "Unknown";
 }
 
 async function readJson(request, limit = 1_000_000) {

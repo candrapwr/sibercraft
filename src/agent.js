@@ -287,6 +287,13 @@ export async function runAgent({ session, store, prompt, images = [], config, we
     throw new Error(`Agent mencapai batas ${config.maxIterations} iterasi`);
   } catch (error) {
     await store.update(session.id, { status: "error" });
+    // Attach context for the error log (picked up by streamChat). iteration is
+    // the loop counter at the point of failure (0-based; null if pre-loop).
+    // modelsUsed.at(-1) is the model selected for the failing iteration.
+    error._aiContext = {
+      iteration: typeof iteration === "number" ? iteration : null,
+      modelsUsed: modelsUsed.at(-1) || { model: config.model, mode: hasImages ? "multimodal" : "primary" },
+    };
     throw error;
   }
 }

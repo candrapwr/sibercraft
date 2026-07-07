@@ -69,5 +69,24 @@ export function runMigrations(db) {
 
     CREATE INDEX IF NOT EXISTS idx_verification_tokens_user
       ON verification_tokens(user_id);
+
+    -- Admin-facing AI error log. Captured for every non-abort failure during
+    -- an AI turn (primary & multimodal). Prompts are intentionally NOT stored.
+    -- Retention is manual: admins delete entries or clear all from the panel.
+    CREATE TABLE IF NOT EXISTS ai_error_logs (
+      id              TEXT PRIMARY KEY,
+      session_id      TEXT,
+      owner_id        TEXT,
+      model           TEXT,
+      provider_source TEXT,
+      mode            TEXT,
+      error_message   TEXT NOT NULL,
+      error_type      TEXT,
+      iteration       INTEGER,
+      created_at      TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_error_logs_created ON ai_error_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_error_logs_owner ON ai_error_logs(owner_id);
   `);
 }
