@@ -348,9 +348,12 @@ async function handleApi(request, response, url, user) {
   }
   if (method === "POST" && action === "stop") {
     await store.getForEdit(id, access);
-    const controller = activeRuns.get(id);
-    if (controller) controller.abort();
-    return sendJson(response, 200, { stopped: Boolean(controller) });
+    const run = activeRuns.get(id);
+    if (run) {
+      run.intentional = true; // mark so the catch handler skips logging this abort
+      run.controller.abort();
+    }
+    return sendJson(response, 200, { stopped: Boolean(run) });
   }
   // Rename session. action = "rename"
   if (method === "POST" && action === "rename") {
@@ -683,7 +686,11 @@ async function streamChat(request, response, id, access) {
     "X-Content-Type-Options": "nosniff",
   });
   const controller = new AbortController();
-  activeRuns.set(id, controller);
+  // activeRuns stores { controller, intentional } so the catch handler can
+  // distinguish a deliberate user Stop (POST /stop → intentional=true) from an
+  // involuntary disconnect (client closed → response 'close' event). Both
+  // surface as AbortError, but only the former should be skipped from logging.
+  activeRuns.set(id, { controller, intentional: false });
   let finished = false;
   const emit = (event) => {
     let publicEvent = event;
@@ -732,12 +739,19 @@ async function streamChat(request, response, id, access) {
     if (checkpoint && !result?.mutated) await store.discardCheckpoint(id, checkpoint);
   } catch (error) {
     const isAbort = error.name === "AbortError";
+    const run = activeRuns.get(id);
+    // An abort is "intentional" when the user clicked Stop (POST /stop set the
+    // flag). An abort WITHOUT the flag means the client disconnected mid-turn
+    // (network drop, tab closed, browser timeout) — that is a real failure from
+    // the user's perspective ("network error") and SHOULD be logged.
+    const intentionalStop = isAbort && Boolean(run?.intentional);
     const message = isAbort ? "Proses dihentikan" : error.message;
     emit({ type: "error", message });
-    // Log non-abort AI errors for admin observability. AbortError is a user
-    // action (Stop), not a real failure, so it is intentionally excluded.
+    // Log errors for admin observability, EXCEPT a deliberate user Stop.
+    // Network disconnects (unintentional abort) are logged as "Network" so
+    // admins can spot connectivity / long-running-turn issues.
     // Best-effort: a logging failure must never break the chat flow.
-    if (!isAbort) {
+    if (!intentionalStop) {
       try {
         const ctx = error._aiContext || {};
         const model = ctx.modelsUsed?.model || agentConfig.model;
@@ -748,8 +762,10 @@ async function streamChat(request, response, id, access) {
           model,
           providerSource: agentConfig._providerSource || "server",
           mode,
-          errorMessage: error.message,
-          errorType: classifyError(error),
+          errorMessage: isAbort
+            ? "Koneksi terputus saat AI bekerja (network disconnect / client closed)"
+            : error.message,
+          errorType: isAbort ? "Network" : classifyError(error),
           iteration: ctx.iteration ?? null,
         });
       } catch {
@@ -1061,6 +1077,14 @@ function mimeType(path) {
     ".woff2": "font/woff2",
   })[extname(path).toLowerCase()] || "application/octet-stream";
 }
+
+// AI turns can run long (multi-frame builds, large file writes, slow streaming
+// from the LLM). Node's default requestTimeout is 5 minutes, which aborts the
+// request mid-turn and surfaces to the user as an opaque "network error".
+// Raise it so long turns complete instead of being killed by the server.
+// headersTimeout must stay > keepAliveTimeout; the default (60s) is fine here.
+server.requestTimeout = 30 * 60 * 1000; // 30 minutes
+server.timeout = 0; // no socket-idle timeout (streaming chats can pause)
 
 server.listen(config.port, () => {
   console.log(`Mockup AI berjalan di http://localhost:${config.port}`);

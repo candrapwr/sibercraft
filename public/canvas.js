@@ -150,6 +150,7 @@ function buildFrameEl(state) {
       </div>
     </div>
     <iframe title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"></iframe>
+    <div class="frame-overlay" aria-hidden="true"><div class="frame-overlay-spinner"></div></div>
   `;
   applyFrameBox(el, state);
   // Wire HUD buttons (delegation handled at area level; here we set initial device active state).

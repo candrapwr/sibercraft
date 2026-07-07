@@ -358,6 +358,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .canvas-area { position: relative; min-width: 0; min-height: 0; overflow: hidden; cursor: grab; overscroll-behavior: none; touch-action: none; background-color: #101715; background-image: radial-gradient(rgba(133, 151, 141, .26) 0.7px, transparent 0.7px); background-size: 16px 16px; }.canvas-area.grabbing { cursor: grabbing; }
 .canvas-viewport { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; pointer-events: none; }.canvas-viewport > * { pointer-events: auto; }
 .canvas-frame { position: absolute; overflow: visible; cursor: grab; background: transparent; outline: 1px solid rgba(208,220,212,.35); outline-offset: 0; box-shadow: 0 14px 40px rgba(0,0,0,.35); transition: width .2s, height .2s, border-radius .2s, box-shadow .15s, outline-color .15s; }.canvas-frame.tablet { border-radius: 12px; }.canvas-frame.mobile { border-radius: 18px; }.canvas-frame.grabbing { cursor: grabbing; }.canvas-frame.selected { outline-color: rgba(76,179,127,.7); outline-width: 2px; box-shadow: 0 0 0 4px rgba(76,179,127,.18), 0 14px 40px rgba(0,0,0,.35); }.canvas-frame.drafting { outline-color: rgba(237,123,75,.7); outline-width: 2px; box-shadow: 0 0 0 4px rgba(237,123,75,.15), 0 14px 40px rgba(0,0,0,.35); }.canvas-frame.drafting .frame-label { background: rgba(94,50,30,.92); color: #f6c9b8; }.canvas-frame.drafting .frame-label::after { content: " • drafting"; opacity: .85; }.canvas-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: white; border-radius: inherit; }
+/* Loading overlay: tampil hanya saat class .drafting aktif (AI sedang stream
+   write_file ke frame ini). Overlay oranye lembut semi-transparan agar
+   perubahan konten di iframe tetap terlihat. pointer-events:none → iframe
+   tetap bisa diklik/di-scroll. z-index di atas iframe, di bawah controls. */
+.frame-overlay { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; background: rgba(237,123,75,.14); backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); border-radius: inherit; pointer-events: none; }
+.canvas-frame.drafting .frame-overlay { display: flex; }
+.frame-overlay-spinner { width: 30px; height: 30px; border: 3px solid rgba(237,123,75,.25); border-top-color: rgba(237,123,75,.9); border-radius: 50%; animation: frame-spin .7s linear infinite; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+@keyframes frame-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .frame-overlay-spinner { animation: none; border-top-color: rgba(237,123,75,.6); } }
 /* Drag handles: 4 thin strips at the frame edges so the iframe in the middle
    stays fully interactive (clickable). Each strip is 12px wide just outside the frame. */
 .canvas-frame .frame-drag-handle { position: absolute; cursor: grab; }.canvas-frame.grabbing .frame-drag-handle { cursor: grabbing; }
