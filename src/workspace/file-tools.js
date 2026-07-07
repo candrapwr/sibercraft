@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureWebpageScreenshot } from "../media/web-screenshot.js";
 
@@ -13,6 +13,71 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       const fullPath = await resolveWithin(workspaceDir, path);
       const entries = await readdir(fullPath, { withFileTypes: true });
       return entries.map((entry) => `${entry.isDirectory() ? "d" : "-"} ${entry.name}`).join("\n") || "(kosong)";
+    }),
+    tool("grep", "Search for a pattern (regex) across text files in the workspace, recursively. Returns matching lines prefixed by relative path and line number (path:line: match). Use this to find usages of a class/function/variable, locate where something is defined, or audit references before refactoring.", {
+      type: "object",
+      properties: {
+        pattern: {
+          type: "string",
+          description: "Regular expression to search for (JavaScript regex syntax, e.g. 'btn-primary', 'function \\w+\\(', 'TODO').",
+        },
+        path: {
+          type: "string",
+          description: "Relative directory or file to search in; defaults to the workspace root.",
+        },
+        case_insensitive: {
+          type: "boolean",
+          description: "Case-insensitive match. Default false.",
+        },
+        max_results: {
+          type: "integer",
+          minimum: 1,
+          maximum: 500,
+          description: "Maximum number of matching lines to return. Default 200.",
+        },
+      },
+      required: ["pattern"],
+      additionalProperties: false,
+    }, async ({ pattern, path = ".", case_insensitive = false, max_results = 200 }) => {
+      const flags = case_insensitive ? "gi" : "g";
+      let regex;
+      try {
+        regex = new RegExp(pattern, flags);
+      } catch (error) {
+        throw new Error(`Pattern regex tidak valid: ${error.message}`);
+      }
+      const limit = Math.min(Math.max(Number(max_results) || 200, 1), 500);
+      const rootPath = await resolveWithin(workspaceDir, path);
+      const results = [];
+      let scannedFiles = 0;
+      await walkTextFiles(rootPath, async (fullPath) => {
+        scannedFiles++;
+        // Stop early once we have enough matches.
+        if (results.length >= limit) return;
+        const rel = relative(rootPath, fullPath).split("\\").join("/");
+        let content;
+        try {
+          content = await readFile(fullPath, "utf8");
+        } catch {
+          return; // skip unreadable / non-text
+        }
+        const lines = content.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          // Reset lastIndex because the regex has the global flag.
+          regex.lastIndex = 0;
+          if (regex.test(lines[i])) {
+            // Truncate very long lines so output stays readable.
+            const line = lines[i].length > 300 ? `${lines[i].slice(0, 300)}…` : lines[i];
+            results.push(`${rel}:${i + 1}: ${line}`);
+            if (results.length >= limit) break;
+          }
+        }
+      });
+      if (!results.length) {
+        return scannedFiles > 0 ? `(tidak ada match di ${scannedFiles} file)` : "(tidak ada file untuk dicari)";
+      }
+      const suffix = results.length >= limit ? `\n…(dibatasi ${limit} hasil, mungkin masih ada)` : "";
+      return `${results.join("\n")}${suffix}`;
     }),
     tool("read_file", "Read a UTF-8 text file from the workspace. Use this before editing an existing file.", {
       type: "object",
@@ -258,4 +323,40 @@ function tool(name, description, parameters, execute, mutates = false) {
 
 function toRelative(root, path) {
   return relative(root, path).split("\\").join("/");
+}
+
+// Max file size we'll grep into; larger files are likely binary/minified and
+// would blow up memory/time on a per-line scan.
+const GREP_MAX_FILE_BYTES = 1_000_000;
+// Extensions treated as text. Anything else is skipped to avoid dumping
+// matches out of base64 images, fonts, etc.
+const GREP_TEXT_EXT = /\.(?:html?|css|js|mjs|cjs|ts|jsx|tsx|json|svg|md|txt|csv|xml|yml|yaml|webmanifest|ini|env|gitignore)$/i;
+
+/**
+ * Recursively walk a directory and invoke onFile for each text file (by
+ * extension + size guard). Used by the grep tool. Skips dotfiles/dotdirs
+ * (same convention as SessionStore.walk) to avoid scanning hidden clutter.
+ */
+async function walkTextFiles(dir, onFile) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await walkTextFiles(fullPath, onFile);
+    } else if (entry.isFile() && GREP_TEXT_EXT.test(entry.name)) {
+      let info;
+      try {
+        info = await stat(fullPath);
+      } catch {
+        continue;
+      }
+      if (info.size <= GREP_MAX_FILE_BYTES) await onFile(fullPath);
+    }
+  }
 }

@@ -11,6 +11,7 @@ Working rules:
 - If the user asks to remove a preview frame, call delete_frame. This only removes the canvas frame; it does not delete the workspace file.
 - If the user asks to delete, remove, or clean up an actual workspace file or folder, call delete_file({ path, recursive }). delete_file removes the file from disk (unlike delete_frame, which only hides its preview). To delete a directory and everything inside it, set recursive=true. Never delete files you just created as part of the current task unless the user explicitly asks. If the deleted file had a frame, also call delete_frame so the canvas does not show a broken preview.
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
+- Use grep to search for a pattern across the workspace (e.g. find where a class, function, or string is used, locate a definition, or check references before refactoring). It returns matches as path:line: match. Prefer grep over reading many files one by one.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
 - When you decide to call tools, always include a short natural-language progress note before or alongside the tool call so the assistant message content is never empty.
 - Produce responsive, high-quality results. Prefer semantic HTML, structured CSS, and browser-native JavaScript without a build step.
