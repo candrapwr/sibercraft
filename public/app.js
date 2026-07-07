@@ -1412,6 +1412,7 @@ function renderHistory(history) {
   ui.chatMessages.replaceChildren();
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
+  state.editDraftCalls = new Map();
   if (!history.length) {
     const empty = document.createElement("div");
     empty.className = "chat-empty";
@@ -1670,6 +1671,24 @@ function setToolArgs(block, args) {
   $(".tool-args", block).textContent = args || "";
 }
 
+/**
+ * Extract the target file path from an edit_file tool's JSON arguments.
+ * Used to show the drafting overlay on the affected frame while edit_file
+ * runs (edit_file isn't streamed like write_file, so preview_draft never
+ * fires for it). The args string is the complete JSON object by the time
+ * tool_args is emitted, so a plain JSON.parse is safe.
+ */
+function extractEditFilePath(argsJson) {
+  try {
+    const parsed = JSON.parse(argsJson || "");
+    const path = typeof parsed.path === "string" ? parsed.path.trim() : "";
+    if (!path || path.startsWith("/") || /^[a-z]:/i.test(path) || path.split("/").includes("..")) return null;
+    return /\.(?:html?|css|js|mjs|svg)$/i.test(path) ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 function setToolResult(block, result, completed = false) {
   block.classList.toggle("running", !completed);
   $(".tool-result pre", block).textContent = result || "";
@@ -1690,11 +1709,13 @@ function finalizeAssistantTurn(turn = state.activeAssistantTurn) {
     turn.wrapper.remove();
     state.activeAssistantTurn = null;
     state.activeToolBlocks = new Map();
+    state.editDraftCalls = new Map();
     return;
   }
   turn.wrapper.classList.remove("pending");
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
+  state.editDraftCalls = new Map();
   scrollChat(true);
 }
 
@@ -1841,12 +1862,30 @@ async function sendPrompt(event) {
         flushBufferedContent();
         const tool = state.activeToolBlocks.get(eventData.callIndex);
         if (tool) setToolArgs(tool, eventData.arguments);
+        // edit_file isn't streamed like write_file (it needs the full old_string
+        // before it can apply), so it never emits preview_draft. Show the
+        // drafting overlay manually by extracting the target path from the
+        // tool args, then clear it when the tool finishes.
+        if (eventData.name === "edit_file") {
+          const path = extractEditFilePath(eventData.arguments);
+          if (path) {
+            state.editDraftCalls.set(eventData.callIndex, path);
+            onDraftUpdate(path);
+          }
+        }
       } else if (eventData.type === "tool_result") {
         flushBufferedContent();
         const tool = state.activeToolBlocks.get(eventData.callIndex);
         finalizeToolBlock(tool, eventData.result);
         state.activeToolBlocks.delete(eventData.callIndex);
         if (eventData.mutated) schedulePreview();
+        // Clear the edit_file drafting overlay for this call (reload happens
+        // via onDraftClear, mirroring the write_file preview_draft_clear flow).
+        const editPath = state.editDraftCalls.get(eventData.callIndex);
+        if (editPath) {
+          state.editDraftCalls.delete(eventData.callIndex);
+          onDraftClear(editPath);
+        }
       } else if (eventData.type === "iteration_end") {
         finalizeAssistantTurn();
       } else if (eventData.type === "assistant_end") {
