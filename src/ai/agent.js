@@ -176,14 +176,18 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       const editSignaled = new Set();
       const emitWriteDraft = (call, force = false) => {
         if (call.name !== "write_file") return;
-        const current = draftProgress.get(call.index) || { lastCheck: 0, lastRawLength: 0, lastContentLength: 0 };
+        const current = draftProgress.get(call.index) || { lastCheck: 0, lastContentLength: 0 };
         const now = Date.now();
-        const rawLength = call.arguments?.length || 0;
-        if (!force && now - current.lastCheck < 100 && rawLength - current.lastRawLength < 8192) return;
+        // Throttle by TIME only. Each preview_draft sends the FULL file content
+        // (not a delta), and extractWriteFileDraft re-parses the whole JSON args
+        // string on every call — so emitting on every token would waste CPU and
+        // bandwidth on large files without visual benefit (the frontend already
+        // coalesces reloads to one per 200ms via DRAFT_INTERVAL). A short fixed
+        // cadence keeps the preview feeling live while bounding the work.
+        if (!force && now - current.lastCheck < 60) return;
         current.lastCheck = now;
-        current.lastRawLength = rawLength;
         const draft = extractWriteFileDraft(call.arguments || "");
-        if (draft && (force || draft.content.length - current.lastContentLength >= 128)) {
+        if (draft && (force || draft.content.length !== current.lastContentLength)) {
           current.lastContentLength = draft.content.length;
           emit({ type: "preview_draft", callIndex: call.index, path: draft.path, content: draft.content });
         }
