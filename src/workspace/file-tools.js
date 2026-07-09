@@ -359,6 +359,20 @@ const GREP_TEXT_EXT = /\.(?:html?|css|js|mjs|cjs|ts|jsx|tsx|json|svg|md|txt|csv|
  * (same convention as SessionStore.walk) to avoid scanning hidden clutter.
  */
 async function walkTextFiles(dir, onFile) {
+  // If the path is itself a file, check it directly instead of readdir.
+  let info;
+  try {
+    info = await stat(dir);
+  } catch {
+    return;
+  }
+  if (info.isFile()) {
+    if (GREP_TEXT_EXT.test(dir) && info.size <= GREP_MAX_FILE_BYTES) {
+      await onFile(dir);
+    }
+    return;
+  }
+  // Otherwise it's a directory – walk recursively.
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
