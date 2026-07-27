@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isConversationalPrompt, selectTurnAi, toModelMessage } from "../src/ai/agent.js";
+import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isolateCreateFrameToolCall, isConversationalPrompt, selectTurnAi, toModelMessage } from "../src/ai/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);
@@ -169,4 +169,37 @@ test("screenshot hasil tool dibentuk sebagai visual context untuk iterasi beriku
     type: "image_url",
     image_url: { url: "data:image/png;base64,AAAA" },
   });
+});
+
+test("create_frame diisolasi dari batch tool lain", () => {
+  const message = {
+    role: "assistant",
+    content: "Saya buat frame dulu.",
+    tool_calls: [
+      { id: "call_frame", type: "function", function: { name: "create_frame", arguments: '{"file":"index.html"}' } },
+      { id: "call_write", type: "function", function: { name: "write_file", arguments: '{"path":"index.html","content":"<h1>Hi</h1>"}' } },
+    ],
+  };
+
+  const isolated = isolateCreateFrameToolCall(message);
+
+  assert.equal(isolated.changed, true);
+  assert.equal(isolated.dropped, 1);
+  assert.deepEqual(isolated.message.tool_calls, [message.tool_calls[0]]);
+});
+
+test("batch tanpa create_frame tidak diubah", () => {
+  const message = {
+    role: "assistant",
+    content: "Saya baca file.",
+    tool_calls: [
+      { id: "call_read", type: "function", function: { name: "read_file", arguments: '{"path":"index.html"}' } },
+      { id: "call_grep", type: "function", function: { name: "grep", arguments: '{"pattern":"hero"}' } },
+    ],
+  };
+
+  const isolated = isolateCreateFrameToolCall(message);
+
+  assert.equal(isolated.changed, false);
+  assert.equal(isolated.message, message);
 });

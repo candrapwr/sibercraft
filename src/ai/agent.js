@@ -7,7 +7,8 @@ Your job is to create and modify web mockups that run directly in the browser.
 
 Working rules:
 - All deliverables must be static web files inside the workspace: HTML, CSS, JavaScript, SVG, JSON, or related text assets.
-- The workspace can hold multiple HTML files. Each preview frame in the canvas displays one HTML file. IMPORTANT: the user only sees files that have a registered frame. Before or alongside writing any HTML file the user should see, ALWAYS call create_frame({ file, device }) so a preview frame exists. If you write_file an HTML file without first registering it with create_frame, the user sees nothing until the very end. For the first action of any build task, call create_frame first, then write_file its content. Reuse an existing frame only when editing an already-shown file. Give each frame a meaningful filename (its title is derived from it). When creating a frame, pick the "device" that best matches the user's intent: "mobile"/"phone"/"app screen" -> mobile, "tablet"/"iPad" -> tablet, otherwise desktop. Default to desktop if unclear.
+- The workspace can hold multiple HTML files. Each preview frame in the canvas displays one HTML file. IMPORTANT: the user only sees files that have a registered frame. Before writing any HTML file the user should see, ALWAYS call create_frame({ file, device }) so a preview frame exists. If you write_file an HTML file without first registering it with create_frame, the user sees nothing until the very end. For the first action of any build task, call create_frame first, wait for that tool result, then write_file its content in the next assistant turn. Reuse an existing frame only when editing an already-shown file. Give each frame a meaningful filename (its title is derived from it). When creating a frame, pick the "device" that best matches the user's intent: "mobile"/"phone"/"app screen" -> mobile, "tablet"/"iPad" -> tablet, otherwise desktop. Default to desktop if unclear.
+- Tool-call exclusivity: NEVER combine create_frame with any other tool call in the same assistant response. When create_frame is needed, emit exactly one create_frame call and no other tool calls; after its result is returned, continue with write_file, edit_file, or other tools.
 - If the user asks to remove a preview frame, call delete_frame. This only removes the canvas frame; it does not delete the workspace file.
 - If the user asks to delete, remove, or clean up an actual workspace file or folder, call delete_file({ path, recursive }). delete_file removes the file from disk (unlike delete_frame, which only hides its preview). To delete a directory and everything inside it, set recursive=true. Never delete files you just created as part of the current task unless the user explicitly asks. If the deleted file had a frame, also call delete_frame so the canvas does not show a broken preview.
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
@@ -223,6 +224,11 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         turnPromptTokens += completion.usage.prompt_tokens || 0;
         turnCompletionTokens += completion.usage.completion_tokens || 0;
       }
+      const isolated = isolateCreateFrameToolCall(completion.message);
+      if (isolated.changed) {
+        completion.message = isolated.message;
+        emit({ type: "tool_batch_isolated", name: "create_frame", dropped: isolated.dropped });
+      }
       const calls = completion.message.tool_calls || [];
       const isFinalResponse = !calls.length || completion.finishReason !== "tool_calls";
       completion.message.model = iterationAi.model;
@@ -318,6 +324,19 @@ export async function runAgent({ session, store, prompt, images = [], config, we
 
 function summarize(value) {
   return value.length > 1240 ? `${value.slice(0, 237)}...` : value;
+}
+
+export function isolateCreateFrameToolCall(message) {
+  const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+  const createFrameCall = calls.find((call) => call.function?.name === "create_frame");
+  if (!createFrameCall || calls.length === 1) {
+    return { changed: false, message, dropped: 0 };
+  }
+  return {
+    changed: true,
+    dropped: calls.length - 1,
+    message: { ...message, tool_calls: [createFrameCall] },
+  };
 }
 
 function presentToolResult(name, result) {

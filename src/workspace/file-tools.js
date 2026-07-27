@@ -200,7 +200,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
     ...(options.onCreateFrame ? [
       tool(
         "create_frame",
-        "Register a new preview frame in the canvas. A frame displays one HTML file from the workspace as a live preview the user can see. Call this once per distinct page/surface you create, then write that file's content with write_file. The `file` must end in .html or .htm. Use a meaningful filename since the frame title is derived from it (e.g. dashboard.html -> 'dashboard').",
+        "Register a new preview frame in the canvas. A frame displays one HTML file from the workspace as a live preview the user can see. EXCLUSIVE TOOL: when you call create_frame, it must be the only tool call in that assistant response. Do not call write_file, edit_file, read_file, list_dir, or any other tool in the same response. Wait for the create_frame result, then write that file's content with write_file in the next assistant turn. Call this once per distinct page/surface you create. The `file` must end in .html or .htm. Use a meaningful filename since the frame title is derived from it (e.g. dashboard.html -> 'dashboard').",
         {
           type: "object",
           properties: {
