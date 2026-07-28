@@ -428,3 +428,5 @@ Bebas dipakai, dimodifikasi, dan didistribusikan — termasuk untuk keperluan ko
 SiberCraft berguna? ⭐ Star repo-nya dan bagikan ke sesama builder!
 
 </div>
+
+<!-- repo: sibercraft · dataSiberLab · 2026 -->
