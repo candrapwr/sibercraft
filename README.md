@@ -1,6 +1,25 @@
-# SiberCraft
+<div align="center">
+
+# 🎨 SiberCraft
 
 **Buat tampilan web dengan AI, langsung dari percakapan — di atas canvas tanpa batas.**
+
+Ubah ide, gambar referensi, atau deskripsi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan, AI membuat frame preview di canvas luas yang bisa di-pan, di-zoom, dan di-drag — mirip Figma atau Canva.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-green.svg)](https://nodejs.org)
+[![Deps](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#penyiapan-untuk-pengelola-aplikasi)
+[![JavaScript](https://img.shields.io/badge/JavaScript-vanilla-F7DF1E?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![AI](https://img.shields.io/badge/AI-DeepSeek-4D6BFE.svg)](#)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#)
+[![Status](https://img.shields.io/badge/status-aktif_maintained-success.svg)](#)
+[![Stars](https://img.shields.io/github/stars/candrapwr/sibercraft?style=social&label=Star)](https://github.com/candrapwr/sibercraft/stargazers)
+
+</div>
+
+---
+
+> 🌐 Bagian dari **Ekosistem Siber** — dibangun & dirawat oleh **dataSiberLab**.
 
 SiberCraft mengubah ide, gambar referensi, atau deskripsi menjadi mockup, dashboard, chart, diagram, landing page, dan prototype interaktif. Cukup jelaskan tampilan yang diinginkan, AI akan membuat frame preview di canvas luas yang bisa di-pan, di-zoom, dan di-drag — mirip Figma atau Canva.
 
@@ -387,4 +406,25 @@ Jika aplikasi tidak dapat dibuka atau status AI menunjukkan belum siap, hubungi 
 
 SiberCraft dirancang agar proses membuat interface terasa seperti berdiskusi dengan rekan desain dan pengembangan: jelaskan ide, lihat frame tumbuh secara live di canvas, lalu revisi sampai sesuai.
 
-Dikembangkan oleh **datasiberLab**. Kontak: [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)
+---
+
+## 📄 Lisensi
+
+Dirilis di bawah **Lisensi MIT**. Lihat [LICENSE](./LICENSE).
+
+Bebas dipakai, dimodifikasi, dan didistribusikan — termasuk untuk keperluan komersial.
+
+---
+
+## 📬 Kontak & Komunitas
+
+<div align="center">
+
+**Dibuat dengan ❤️ oleh [dataSiberLab](https://datasiber.com)** sebagai bagian dari ekosistem Siber.
+
+📧 **Kontak:** [candrapwr@datasiber.com](mailto:candrapwr@datasiber.com)
+🌐 **Website:** [datasiber.com](https://datasiber.com)
+
+SiberCraft berguna? ⭐ Star repo-nya dan bagikan ke sesama builder!
+
+</div>
