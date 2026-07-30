@@ -23,7 +23,7 @@ test("agent berpindah dari primary ke multimodal setelah tool screenshot", async
     let raw = "";
     for await (const chunk of request) raw += chunk;
     const payload = JSON.parse(raw);
-    requests.push(payload);
+    requests.push({ payload, headers: request.headers });
     response.writeHead(200, { "Content-Type": "text/event-stream" });
     if (requests.length === 1) {
       sendSse(response, {
@@ -78,10 +78,18 @@ test("agent berpindah dari primary ke multimodal setelah tool screenshot", async
   });
 
   assert.equal(requests.length, 2);
-  assert.equal(requests[0].model, "primary-model");
-  assert.equal(requests[1].model, "vision-model");
+  assert.equal(requests[0].payload.model, "primary-model");
+  assert.equal(requests[1].payload.model, "vision-model");
+  assert.equal(requests[0].headers["user-agent"], "Siberflow/0.1");
+  assert.equal(requests[0].headers["x-client-name"], "siberflow");
+  assert.equal(requests[0].headers["x-client-version"], "0.1");
+  assert.equal(requests[0].headers["x-app-name"], "siberflow");
+  assert.equal(requests[1].headers["user-agent"], "Siberflow/0.1");
+  assert.equal(requests[1].headers["x-client-name"], "siberflow");
+  assert.equal(requests[1].headers["x-client-version"], "0.1");
+  assert.equal(requests[1].headers["x-app-name"], "siberflow");
   assert.equal(
-    requests[1].messages.some((message) =>
+    requests[1].payload.messages.some((message) =>
       Array.isArray(message.content)
       && message.content.some((item) => item.type === "image_url" && item.image_url.url.startsWith("data:image/png;base64,"))
     ),

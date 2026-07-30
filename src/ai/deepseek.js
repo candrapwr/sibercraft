@@ -1,3 +1,5 @@
+import { withAppIdentityHeaders } from "../config/app-headers.js";
+
 export class DeepSeekClient {
   constructor({ apiKey, baseUrl, model }) {
     this.apiKey = apiKey;
@@ -9,10 +11,10 @@ export class DeepSeekClient {
     if (!this.apiKey) throw new Error("PRIMARY_API_KEY belum dikonfigurasi di file .env");
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: {
+      headers: withAppIdentityHeaders({
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
-      },
+      }),
       body: JSON.stringify({
         model: this.model,
         messages,
