@@ -348,7 +348,7 @@ MAIL_FROM_ADDRESS=craft@example.com
 MAIL_FROM_NAME="Craft idSiber"
 ```
 
-Konfigurasi lainnya (model AI, screenshot API, optimasi konteks) dijelaskan di `.env.example`.
+Konfigurasi lainnya (model AI, reasoning effort, screenshot API, optimasi konteks) dijelaskan di `.env.example`.
 
 ### Penyimpanan data
 

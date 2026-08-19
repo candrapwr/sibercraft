@@ -139,6 +139,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         apiKey: iterationAi.apiKey,
         baseUrl: iterationAi.baseUrl,
         model: iterationAi.model,
+        reasoningEffort: iterationAi.reasoningEffort,
       });
       const lastModel = modelsUsed.at(-1);
       if (!lastModel || lastModel.model !== iterationAi.model || lastModel.mode !== iterationAi.mode) {

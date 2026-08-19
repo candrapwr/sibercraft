@@ -53,6 +53,7 @@ export const config = {
     apiKey: process.env.PRIMARY_API_KEY || "",
     model: process.env.PRIMARY_MODEL || "deepseek-v4-flash",
     baseUrl: (process.env.PRIMARY_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
+    reasoningEffort: resolveReasoningEffort(process.env.REASONING_EFFORT),
     maxIterations: toPositiveInt(process.env.AGENT_MAX_ITERATIONS, 50),
     requestLogging: toBoolean(process.env.LLM_REQUEST_LOGGING, false),
     contextOptimize: {
@@ -63,6 +64,7 @@ export const config = {
       apiKey: process.env.MULTIMODAL_API_KEY || process.env.PRIMARY_API_KEY || "",
       model: process.env.MULTIMODAL_MODEL || "",
       baseUrl: (process.env.MULTIMODAL_BASE_URL || process.env.PRIMARY_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
+      reasoningEffort: resolveReasoningEffort(process.env.REASONING_EFFORT),
     },
   },
 };
@@ -98,4 +100,11 @@ function toPositiveInt(value, fallback) {
 function toBoolean(value, fallback) {
   if (value == null || value === "") return fallback;
   return /^(1|true|yes|on)$/i.test(String(value).trim());
+}
+
+function resolveReasoningEffort(value) {
+  const normalized = String(value || "none").trim().toLowerCase();
+  return ["none", "high", "max"].includes(normalized)
+    ? normalized
+    : "none";
 }
