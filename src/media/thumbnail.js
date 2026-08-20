@@ -53,7 +53,7 @@ export function computeLayoutBox(frames) {
 /**
  * Build the HTML layout page that places one iframe per frame at fit-all
  * positions. This page is served by the /__thumb_layout/:id route and
- * captured by Chrome headless. Background mirrors the canvas grid theme.
+ * captured by Chrome headless. Background mirrors the ink-paper canvas grid theme.
  *
  * @param {object} options
  * @param {string} options.id         Session id.
@@ -79,7 +79,7 @@ export function buildLayoutHtml({ id, frames, port }) {
     return `<iframe class="frame" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" src="${src}" loading="eager"></iframe>`;
   }).join("\n");
 
-  // Background uses the same dark grid as the canvas (.session-preview /
+  // Background uses the same ink-paper grid as the canvas (.session-preview /
   // .canvas-area) so the thumbnail matches the in-app look.
   const iframeCount = frames.length;
   const html = `<!doctype html>
@@ -89,19 +89,19 @@ export function buildLayoutHtml({ id, frames, port }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>thumb</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #131b17; }
+  html, body { margin: 0; padding: 0; background: #ebe4d7; }
   body {
     position: relative;
     width: ${pageWidth}px;
     min-height: ${Math.ceil(box.height + PADDING * 2)}px;
-    background-image: radial-gradient(rgba(133,151,141,.18) 0.7px, transparent 0.7px);
+    background-image: radial-gradient(rgba(99,89,74,.18) 0.7px, transparent 0.7px);
     background-size: 14px 14px;
     background-position: 0 0;
   }
   .frame {
     position: absolute;
-    border: 1px solid rgba(133,151,141,.35);
-    border-radius: 6px;
+    border: 1px solid rgba(188,176,157,.8);
+    border-radius: 4px;
     background: #fff;
     overflow: hidden;
   }
@@ -131,7 +131,7 @@ ${iframeNodes}
 }
 
 function emptyLayoutHtml() {
-  return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#131b17}</style></head><body></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#ebe4d7}</style></head><body></body></html>`;
 }
 
 /**

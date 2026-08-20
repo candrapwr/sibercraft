@@ -102,3 +102,63 @@ button, input, textarea, select { font-family: var(--sans); }
   .template-options { grid-template-columns: 1fr; }.api-field-row { grid-template-columns: 1fr; }.user-menu-badges { display: none; }.api-settings-notice { max-width: 100%; }
   .canvas-view-header { padding: 0 9px; gap: 5px; }.canvas-view-header button { padding: 0 8px; }.canvas-view-header .header-button span { display: none; }.canvas-layout { grid-template-columns: 1fr; }.chat-dock { position: absolute; z-index: 20; inset: 0 auto 0 0; width: min(310px,86vw); box-shadow: 15px 0 35px rgba(42,34,23,.12); }.canvas-layout.dock-collapsed { grid-template-columns: 1fr; }.canvas-layout.dock-collapsed .chat-dock { display: none; }.chat-dock-toggle { left: min(310px,86vw); }.canvas-layout.dock-collapsed .chat-dock-toggle { left: 0; }
 }
+
+/* Button geometry pass: keep labels, icons and hit areas on one consistent
+   rhythm across the landing page, split workspace and canvas header. */
+button { line-height: 1; }
+.button {
+  min-height: 40px;
+  padding: 0 15px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.button-large { min-height: 48px; padding: 0 19px; }
+.button-block { height: 46px; }
+.button > span { line-height: 1; }
+.auth-actions .button { min-height: 36px; height: 36px; }
+.section-create {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.language-option { height: 28px; min-width: 32px; display: inline-grid; place-items: center; padding: 0 8px; line-height: 1; }
+.workspace-actions { gap: 6px; }
+.header-button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.icon-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  line-height: 1;
+}
+.project-rename-btn { display: grid; place-items: center; padding: 0; }
+.canvas-view-header { gap: 7px; }
+.canvas-view-header > button:not(.icon-button):not(.header-button) {
+  width: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+.canvas-view-header .header-button { width: auto; padding: 0 10px; }
+.viewport-tabs button { min-width: 34px; height: 30px; line-height: 1; }
+.toolbar-actions button { display: grid; place-items: center; padding: 0; line-height: 1; }
+.send-button { display: grid; place-items: center; flex: 0 0 auto; padding: 0; line-height: 1; }
+.stop-button { min-height: 29px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; white-space: nowrap; }
+.canvas-controls button { display: grid; place-items: center; padding: 0; line-height: 1; }
+.chat-dock-toggle { line-height: 1; }
