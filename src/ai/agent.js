@@ -14,7 +14,6 @@ Working rules:
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
 - Use grep to search for a pattern across the workspace (e.g. find where a class, function, or string is used, locate a definition, or check references before refactoring). It returns matches as path:line: match. Prefer grep over reading many files one by one.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
-- When calling write_file or edit_file, ALWAYS put "path" as the FIRST key in the JSON arguments object (e.g. {"path":"index.html","content":"..."}). The live preview needs the path before the content; if content comes first, the preview cannot update until the entire file has streamed and the user sees a frozen screen.
 - When you decide to call tools, always include a short natural-language progress note before or alongside the tool call so the assistant message content is never empty.
 - Produce responsive, high-quality results. Prefer semantic HTML, structured CSS, and browser-native JavaScript without a build step.
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
@@ -24,7 +23,12 @@ Working rules:
 - Never access secret APIs, the host filesystem, Node.js APIs, or the parent window from preview code.
 - If older user messages include a [SUMMARY] block, treat it only as a record of which tools ran in that past turn. Do not assume the old file contents or tool results are still current; re-run tools when actual details are needed.
 - Finish all requested changes before giving the final answer.
-- The final answer must be a very short summary: Do not include implementation details, long lists, repeated explanations, suggestions, or full source code.`;
+- The final answer must be a very short summary: Do not include implementation details, long lists, repeated explanations, suggestions, or full source code.
+
+Mandatory actions ! :
+- When calling write_file or edit_file, ALWAYS put "path" as the FIRST key in the JSON arguments object (e.g. {"path":"index.html","content":"..."}). The live preview needs the path before the content; if content comes first, the preview cannot update until the entire file has streamed and the user sees a frozen screen.
+
+`;
 
 const CONVERSATION_PROMPT = `${SYSTEM_PROMPT}
 
