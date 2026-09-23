@@ -116,6 +116,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       await assertNotDirectory(fullPath, path);
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, content, "utf8");
+      await assertFileContent(fullPath, content, path);
       await onMutation(path);
       return `Berhasil menulis ${content.length} byte ke ${path}`;
     }, true),
@@ -147,6 +148,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
         : content.slice(0, first) + new_string + content.slice(first + old_string.length);
       if (next.length > 2_000_000) throw new Error("Hasil file terlalu besar");
       await writeFile(fullPath, next, "utf8");
+      await assertFileContent(fullPath, next, path);
       await onMutation(path);
       return `Berhasil mengedit ${toRelative(workspaceDir, fullPath)}`;
     }, true),
@@ -165,6 +167,10 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       ]);
       await mkdir(dirname(destinationPath), { recursive: true });
       await copyFile(sourcePath, destinationPath);
+      const [sourceInfo, destinationInfo] = await Promise.all([stat(sourcePath), stat(destinationPath)]);
+      if (sourceInfo.size !== destinationInfo.size) {
+        throw new Error(`Verifikasi gagal setelah menyalin ${source} ke ${destination}`);
+      }
       await onMutation(destination);
       return `Berhasil menyalin ${source} ke ${destination}`;
     }, true),
@@ -192,6 +198,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
         throw new Error(`Path ${path} adalah direktori. Set recursive=true untuk menghapus direktori beserta isinya.`);
       }
       await rm(fullPath, { recursive: isDirectory ? Boolean(recursive) : false, force: false });
+      await assertMissing(fullPath, path);
       await onMutation(path);
       return isDirectory
         ? `Berhasil menghapus direktori ${path} beserta isinya`
@@ -304,22 +311,25 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
     })),
     async execute(name, rawArguments) {
       const selected = tools.find((item) => item.name === name);
-      if (!selected) return { result: `Error: tool ${name} tidak tersedia`, mutated: false };
+      if (!selected) return { ok: false, result: `Error: tool ${name} tidak tersedia`, mutated: false, artifacts: [] };
       try {
         const args = rawArguments?.trim() ? JSON.parse(rawArguments) : {};
         const output = await selected.execute(args);
         if (output && typeof output === "object" && !Buffer.isBuffer(output)) {
+          const result = String(output.result || "").slice(0, 400_000);
+          const ok = !result.startsWith("Error:");
           return {
-            result: String(output.result || "").slice(0, 400_000),
-            mutated: selected.mutates,
+            ok,
+            result,
+            mutated: ok && selected.mutates,
             artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
             ...(output.frame ? { frame: output.frame } : {}),
             ...(Array.isArray(output.frames) ? { frames: output.frames } : {}),
           };
         }
-        return { result: String(output).slice(0, 400_000), mutated: selected.mutates, artifacts: [] };
+        return { ok: true, result: String(output).slice(0, 400_000), mutated: selected.mutates, artifacts: [] };
       } catch (error) {
-        return { result: `Error: ${error.message}`, mutated: false, artifacts: [] };
+        return { ok: false, result: `Error: ${error.message}`, mutated: false, artifacts: [] };
       }
     },
   };
@@ -344,6 +354,23 @@ async function assertNotDirectory(fullPath, requestedPath) {
     // ENOENT = path tidak ada → aman, lanjut (akan dibuat). Re-throw error lain.
     if (error.code !== "ENOENT") throw error;
   }
+}
+
+async function assertFileContent(fullPath, expected, requestedPath) {
+  const actual = await readFile(fullPath, "utf8");
+  if (actual !== expected) {
+    throw new Error(`Verifikasi gagal setelah menulis ${requestedPath}`);
+  }
+}
+
+async function assertMissing(fullPath, requestedPath) {
+  try {
+    await stat(fullPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error(`Verifikasi gagal setelah menghapus ${requestedPath}`);
 }
 
 // Max file size we'll grep into; larger files are likely binary/minified and

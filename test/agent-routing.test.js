@@ -44,6 +44,24 @@ test("agent berpindah dari primary ke multimodal setelah tool screenshot", async
         }],
       });
       sendSse(response, { choices: [{ delta: {}, finish_reason: "tool_calls" }] });
+    } else if (requests.length === 2) {
+      sendSse(response, {
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: "call_write_mockup",
+              type: "function",
+              function: {
+                name: "write_file",
+                arguments: '{"path":"index.html","content":"<h1>Mockup</h1>"}',
+              },
+            }],
+          },
+          finish_reason: null,
+        }],
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: "tool_calls" }] });
     } else {
       sendSse(response, {
         choices: [{ delta: { content: "Mockup selesai." }, finish_reason: "stop" }],
@@ -77,7 +95,7 @@ test("agent berpindah dari primary ke multimodal setelah tool screenshot", async
     emit: (event) => events.push(event),
   });
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.equal(requests[0].payload.model, "primary-model");
   assert.equal(requests[1].payload.model, "vision-model");
   assert.equal(requests[0].headers["user-agent"], "Siberflow/0.1");
@@ -99,6 +117,7 @@ test("agent berpindah dari primary ke multimodal setelah tool screenshot", async
     events.filter((event) => event.type === "iteration_model").map(({ model, mode }) => ({ model, mode })),
     [
       { model: "primary-model", mode: "primary" },
+      { model: "vision-model", mode: "multimodal" },
       { model: "vision-model", mode: "multimodal" },
     ],
   );

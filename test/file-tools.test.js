@@ -15,11 +15,13 @@ test("file tools menulis dan mengedit file serta melaporkan mutation", async (t)
   const edited = await tools.execute("edit_file", JSON.stringify({
     path: "index.html", old_string: "Lama", new_string: "Baru",
   }));
+  assert.equal(edited.ok, true);
   assert.equal(edited.mutated, true);
   assert.equal(await readFile(join(root, "index.html"), "utf8"), "<h1>Baru</h1>");
   assert.deepEqual(mutations, ["index.html"]);
 
   const escaped = await tools.execute("write_file", JSON.stringify({ path: "../escape.txt", content: "no" }));
+  assert.equal(escaped.ok, false);
   assert.match(escaped.result, /^Error:/);
   assert.equal(escaped.mutated, false);
 });
@@ -68,6 +70,7 @@ test("delete_file menghapus file dan melaporkan mutation", async (t) => {
   const tools = createFileTools(root, async (path) => mutations.push(path));
 
   const result = await tools.execute("delete_file", JSON.stringify({ path: "old.html" }));
+  assert.equal(result.ok, true);
   assert.equal(result.mutated, true);
   assert.match(result.result, /Berhasil menghapus old\.html/);
   // Pesan memakai path yang diberikan user, bukan path absolut yang di-resolve.

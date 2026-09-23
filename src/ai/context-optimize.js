@@ -58,14 +58,14 @@ export function optimizeContext(messages, config = { enabled: true, mode: "summa
 
   const mode = config.mode || "summary";
   const result = [];
-  const turnSignatures = [];
-  const turnSeenNames = new Set();
+  const turnActions = [];
   let pendingUserIndex = -1;
 
   const finalizePendingUser = () => {
-    if (mode !== "summary" || pendingUserIndex === -1 || !turnSignatures.length) return;
+    if (mode !== "summary" || pendingUserIndex === -1 || !turnActions.length) return;
     const target = result[pendingUserIndex];
-    target.content = `${target.content}\n\n[SUMMARY]\n${turnSignatures.join("\n")}`;
+    target.content = `${target.content}\n\n[SUMMARY]\n${turnActions.map(renderActionSummary).join("\n")}`;
+    turnActions.length = 0;
   };
 
   for (const message of messages) {
@@ -73,8 +73,7 @@ export function optimizeContext(messages, config = { enabled: true, mode: "summa
       finalizePendingUser();
       result.push({ role: "system", content: message.content });
       pendingUserIndex = -1;
-      turnSignatures.length = 0;
-      turnSeenNames.clear();
+      turnActions.length = 0;
       continue;
     }
 
@@ -82,8 +81,7 @@ export function optimizeContext(messages, config = { enabled: true, mode: "summa
       finalizePendingUser();
       result.push({ role: "user", content: message.content });
       pendingUserIndex = result.length - 1;
-      turnSignatures.length = 0;
-      turnSeenNames.clear();
+      turnActions.length = 0;
       continue;
     }
 
@@ -97,21 +95,44 @@ export function optimizeContext(messages, config = { enabled: true, mode: "summa
           const args = call.function?.arguments || "";
           stats.bytesSaved += args.length;
           if (mode === "summary") {
-            turnSignatures.push(renderSignature(name, args));
-            turnSeenNames.add(name);
+            turnActions.push({
+              id: call.id,
+              signature: renderSignature(name, args),
+              status: "NOT_EXECUTED",
+              result: "",
+            });
           }
         }
         continue;
       }
-      result.push({ role: "assistant", content: message.content || " " });
+      const content = message.content || " ";
+      // An assistant sentence is not evidence that a workspace operation ran.
+      // Keep the text, but make that distinction explicit for the next model.
+      result.push({
+        role: "assistant",
+        content: turnActions.length ? content : `[ASSISTANT_NO_TOOL_EVIDENCE] ${content}`,
+      });
       continue;
     }
 
     if (message.role === "tool") {
       stats.bytesSaved += message.content?.length || 0;
-      if (mode === "summary" && !turnSeenNames.has(message.name)) {
-        turnSignatures.push(message.name);
-        turnSeenNames.add(message.name);
+      if (mode === "summary") {
+        const action = turnActions.find((candidate) => candidate.id === message.tool_call_id);
+        const parsed = parseToolStatus(message.content);
+        if (action) {
+          action.status = parsed.status;
+          action.result = parsed.result;
+        } else {
+          // Preserve evidence even when importing an old/incomplete history
+          // whose tool_call_id does not match its assistant call.
+          turnActions.push({
+            id: message.tool_call_id,
+            signature: message.name || "tool",
+            status: parsed.status,
+            result: parsed.result,
+          });
+        }
       }
     }
   }
@@ -135,4 +156,25 @@ export function optimizeContext(messages, config = { enabled: true, mode: "summa
   }
 
   return { messages: merged, stats };
+}
+
+function parseToolStatus(content = "") {
+  const text = String(content || "");
+  const marker = text.match(/^\[TOOL_STATUS=(SUCCESS|FAILED)(?:; MUTATED)?\]\s*[^:]+:\s*/);
+  if (marker) {
+    return {
+      status: marker[1],
+      result: text.slice(marker[0].length).slice(0, 180).replace(/\s+/g, " "),
+    };
+  }
+  const failed = /^Error:/i.test(text.trim());
+  return {
+    status: failed ? "FAILED" : "SUCCESS",
+    result: failed ? text.slice(0, 180).replace(/\s+/g, " ") : "",
+  };
+}
+
+function renderActionSummary(action) {
+  const suffix = action.status === "FAILED" && action.result ? ` — ${action.result}` : "";
+  return `${action.signature} → ${action.status}${suffix}`;
 }

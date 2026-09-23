@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, isolateCreateFrameToolCall, isConversationalPrompt, selectTurnAi, toModelMessage } from "../src/ai/agent.js";
+import { buildRequestUserMessage, buildRuntimeVisualMessage, compactFinalResponse, extractWriteFileDraft, formatToolReceipt, isolateCreateFrameToolCall, isConversationalPrompt, requiresWorkspaceAction, requiresWorkspaceMutation, selectTurnAi, toModelMessage } from "../src/ai/agent.js";
 
 test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => {
   assert.equal(isConversationalPrompt("halo"), true);
@@ -8,6 +8,26 @@ test("sapaan sederhana diperlakukan sebagai percakapan tanpa file tools", () => 
   assert.equal(isConversationalPrompt("selamat pagi"), true);
   assert.equal(isConversationalPrompt("Buatkan landing page"), false);
   assert.equal(isConversationalPrompt("halo, ubah warna halaman"), false);
+});
+
+test("permintaan workspace membutuhkan bukti tool, sedangkan percakapan tidak", () => {
+  assert.equal(requiresWorkspaceAction("cek kondisi file index.html"), true);
+  assert.equal(requiresWorkspaceAction("edit ulang halaman dashboard"), true);
+  assert.equal(requiresWorkspaceMutation("edit ulang halaman dashboard"), true);
+  assert.equal(requiresWorkspaceMutation("cek kondisi file index.html"), false);
+  assert.equal(requiresWorkspaceAction("jelaskan apa itu HTML"), false);
+  assert.equal(requiresWorkspaceAction("halo"), false);
+});
+
+test("receipt tool menyatakan status eksekusi secara eksplisit", () => {
+  assert.equal(
+    formatToolReceipt({ name: "write_file", result: "Berhasil", ok: true, mutated: true }),
+    "[TOOL_STATUS=SUCCESS; MUTATED] write_file: Berhasil",
+  );
+  assert.equal(
+    formatToolReceipt({ name: "edit_file", result: "Error: old_string tidak ditemukan", ok: false, mutated: false }),
+    "[TOOL_STATUS=FAILED] edit_file: Error: old_string tidak ditemukan",
+  );
 });
 
 test("draft write_file dapat diekstrak dari argumen JSON yang belum selesai", () => {
@@ -185,6 +205,7 @@ test("create_frame diisolasi dari batch tool lain", () => {
 
   assert.equal(isolated.changed, true);
   assert.equal(isolated.dropped, 1);
+  assert.deepEqual(isolated.droppedCalls, [message.tool_calls[1]]);
   assert.deepEqual(isolated.message.tool_calls, [message.tool_calls[0]]);
 });
 

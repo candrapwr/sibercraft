@@ -41,7 +41,11 @@ export class DeepSeekClient {
     if (!response.body) throw new Error("Primary AI mengembalikan response kosong");
 
     let content = "";
-    let finishReason = "stop";
+    // A missing finish_reason is not proof that the model stopped normally.
+    // In particular, some compatible gateways emit a complete tool call and
+    // then report "stop" (or omit the reason). The agent decides based on the
+    // reconstructed tool_calls array, while this value remains observational.
+    let finishReason = null;
     let usage = null;
     const toolCalls = new Map();
 

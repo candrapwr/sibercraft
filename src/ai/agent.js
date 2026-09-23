@@ -14,6 +14,8 @@ Working rules:
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
 - Use grep to search for a pattern across the workspace (e.g. find where a class, function, or string is used, locate a definition, or check references before refactoring). It returns matches as path:line: match. Prefer grep over reading many files one by one.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
+- Never claim that a file or frame was created, edited, or deleted until the corresponding tool has returned a SUCCESS result. A tool call in progress, an incomplete call, or a prior summary is not evidence that the operation happened.
+- If a requested workspace change has no successful mutation result, say that it was not completed and keep working or report the failure. Do not use "Selesai" as a substitute for a tool result.
 - When you decide to call tools, always include a short natural-language progress note before or alongside the tool call so the assistant message content is never empty.
 - Produce responsive, high-quality results. Prefer semantic HTML, structured CSS, and browser-native JavaScript without a build step.
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
@@ -38,6 +40,35 @@ export function isConversationalPrompt(prompt) {
   const normalized = prompt.trim().toLowerCase().replace(/[!.,?]+$/g, "").trim();
   return /^(halo|hai|hi|hello|hey|pagi|siang|sore|malam|selamat pagi|selamat siang|selamat sore|selamat malam|terima kasih|makasih|thanks|thank you|apa kabar)$/.test(normalized);
 }
+
+const WORKSPACE_CONTEXT_RE = /\b(file|berkas|folder|direktori|workspace|project|proyek|repo|repository|source|halaman|page|website|web|mockup|layar|screen|frame|komponen|component|tombol|button|warna|color|layout|desain|design|kode|code|aplikasi|app)\b/i;
+const WORKSPACE_ACTION_RE = /\b(buat(?:kan)?|bikin|create|build|tambah(?:kan)?|add|edit|ubah|revisi|modifikasi|ganti|atur|perbaiki|fix|update|hapus|delete|remove|bersihkan|clean|tulis(?:kan)?|write|implement|recreate|rebuild|upgrade|tingkatkan|salin|copy|pindah|move|rename|baca|read|lihat|tampilkan|inspect|periksa|examine|pelajari|study|review|analisis|analyze|audit|cek|check|verify|verifikasi|pastikan)\b/i;
+const WORKSPACE_MUTATION_RE = /\b(buat(?:kan)?|bikin|create|build|tambah(?:kan)?|add|edit|ubah|revisi|modifikasi|ganti|atur|perbaiki|fix|update|hapus|delete|remove|bersihkan|clean|tulis(?:kan)?|write|implement|recreate|rebuild|upgrade|tingkatkan|salin|copy|pindah|move|rename)\b/i;
+
+export function requiresWorkspaceAction(prompt) {
+  const normalized = String(prompt || "").trim();
+  if (!normalized || isConversationalPrompt(normalized)) return false;
+  return WORKSPACE_ACTION_RE.test(normalized)
+    && (WORKSPACE_CONTEXT_RE.test(normalized) || /\b(edit ulang|coba lagi|belum berubah|belum ada perubahan)\b/i.test(normalized));
+}
+
+export function requiresWorkspaceMutation(prompt) {
+  const normalized = String(prompt || "").trim();
+  if (!normalized || isConversationalPrompt(normalized)) return false;
+  return WORKSPACE_MUTATION_RE.test(normalized)
+    && (WORKSPACE_CONTEXT_RE.test(normalized) || /\b(edit ulang|coba lagi|belum berubah|belum ada perubahan)\b/i.test(normalized));
+}
+
+export function formatToolReceipt({ name, result, ok, mutated }) {
+  const status = ok ? "SUCCESS" : "FAILED";
+  const mutation = mutated ? "; MUTATED" : "";
+  return `[TOOL_STATUS=${status}${mutation}] ${name}: ${result}`;
+}
+
+const ACTION_RETRY_PROMPT = "Sistem: permintaan workspace belum memiliki bukti tool yang berhasil. Jangan mengklaim selesai. Jalankan tool yang diperlukan sekarang, lalu laporkan hasil sebenarnya.";
+const ACTION_BLOCKED_MESSAGE = "Perubahan belum dilakukan karena belum ada tool workspace yang berhasil. Silakan coba lagi.";
+const MAX_ACTION_RETRIES = 2;
+const FILE_MUTATION_TOOLS = new Set(["write_file", "edit_file", "copy_file", "delete_file"]);
 
 export async function runAgent({ session, store, prompt, images = [], config, webScreenshot, signal, emit, onCreateFrame }) {
   const workspaceDir = store.workspaceDir(session.id);
@@ -81,8 +112,6 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       return frame;
     } : undefined,
     onDeleteFrame: async ({ frameId, file }) => {
-      mutated = true;
-      await store.update(session.id, { status: "working" });
       const current = await store.get(session.id);
       const frames = Array.isArray(current.frames) ? current.frames : [];
       const target = frameId
@@ -92,6 +121,8 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         throw new Error(frameId ? `Frame ${frameId} tidak ditemukan` : `Frame untuk ${file} tidak ditemukan`);
       }
       const nextFrames = await store.removeFrame(session.id, target.id);
+      mutated = true;
+      await store.update(session.id, { status: "working" });
       framedFiles.delete(target.file);
       emit({ type: "frame_deleted", frameId: target.id, file: target.file, frames: nextFrames });
       return { removed: target, frames: nextFrames };
@@ -132,6 +163,13 @@ export async function runAgent({ session, store, prompt, images = [], config, we
   let turnCompletionTokens = 0;
   let visualContextAvailable = hasImages;
   const modelsUsed = [];
+  const actionRequired = !conversational && requiresWorkspaceAction(prompt);
+  const mutationRequired = !conversational && requiresWorkspaceMutation(prompt);
+  const fileMutationRequired = mutationRequired && !/\b(frame|preview|canvas)\b/i.test(prompt);
+  let successfulToolCount = 0;
+  let successfulMutationCount = 0;
+  let successfulFileMutationCount = 0;
+  let actionRetryCount = 0;
 
   try {
     for (let iteration = 0; iteration < config.maxIterations; iteration++) {
@@ -233,11 +271,51 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       if (isolated.changed) {
         completion.message = isolated.message;
         emit({ type: "tool_batch_isolated", name: "create_frame", dropped: isolated.dropped });
+        for (const droppedCall of isolated.droppedCalls) {
+          const droppedIndex = isolated.originalCalls.indexOf(droppedCall);
+          emit({
+            type: "tool_result",
+            callIndex: droppedIndex,
+            name: droppedCall.function?.name || "unknown",
+            result: "Tool tidak dijalankan karena create_frame harus menjadi satu-satunya tool call pada respons ini.",
+            ok: false,
+            status: "not_executed",
+            mutated: false,
+          });
+        }
       }
       const calls = completion.message.tool_calls || [];
-      const isFinalResponse = !calls.length || completion.finishReason !== "tool_calls";
+      // The presence of tool calls is authoritative. Some providers return
+      // finish_reason="stop" even though the stream contains a complete call;
+      // using finishReason here silently skipped the real filesystem action.
+      const isFinalResponse = calls.length === 0;
       completion.message.model = iterationAi.model;
       completion.message.ai_mode = iterationAi.mode;
+
+      const hasRequiredEvidence = mutationRequired
+        ? (fileMutationRequired ? successfulFileMutationCount > 0 : successfulMutationCount > 0)
+        : successfulToolCount > 0;
+      let completionAlreadyStored = false;
+      if (isFinalResponse && actionRequired && !hasRequiredEvidence) {
+        completion.message.execution_status = "unverified";
+        history.push(completion.message);
+        requestHistory.push(completion.message);
+        await store.saveHistory(session.id, history);
+        completionAlreadyStored = true;
+
+        if (actionRetryCount < MAX_ACTION_RETRIES && iteration + 1 < config.maxIterations) {
+          actionRetryCount++;
+          emit({ type: "assistant_retry", reason: "no_successful_tool", attempt: actionRetryCount });
+          requestHistory.push({ role: "user", content: ACTION_RETRY_PROMPT });
+          continue;
+        }
+
+        // Replace a model's unsupported "done" claim with an honest result.
+        // The UI receives final_content so it does not leave the false claim
+        // visible after the retry budget is exhausted.
+        completion.message.content = ACTION_BLOCKED_MESSAGE;
+        emit({ type: "final_content", content: ACTION_BLOCKED_MESSAGE });
+      }
       if (isFinalResponse) {
         const compact = compactFinalResponse(completion.message.content || "Selesai.");
         if (compact !== completion.message.content) {
@@ -246,9 +324,18 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         }
         completion.message.models_used = modelsUsed;
       }
-      history.push(completion.message);
-      requestHistory.push(completion.message);
-      await store.saveHistory(session.id, history);
+      if (!history.includes(completion.message)) {
+        if (isFinalResponse && actionRequired && hasRequiredEvidence) {
+          completion.message.execution_status = "verified";
+        }
+        history.push(completion.message);
+        requestHistory.push(completion.message);
+        await store.saveHistory(session.id, history);
+      } else if (completionAlreadyStored) {
+        // The unsupported final claim may have been replaced above; persist
+        // that correction, not the original claim.
+        await store.saveHistory(session.id, history);
+      }
       if (isFinalResponse) {
         finalText = completion.message.content || "Selesai.";
         const nextUsage = {
@@ -281,18 +368,29 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       const capturedImages = [];
       // Execute tool calls ONE AT A TIME, emitting start/args/result per call so the
       // user can see which tool is currently processing (instead of all "started" at once).
-      for (const [callIndex, call] of calls.entries()) {
+      for (const [position, call] of calls.entries()) {
+        // Keep the provider's original streaming index when create_frame was
+        // isolated from a batch. Otherwise a kept call at index 1 would reuse
+        // index 0 and leave the real UI block stuck in "running" state.
+        const originalIndex = isolated.originalCalls.indexOf(call);
+        const callIndex = originalIndex >= 0 ? originalIndex : position;
         const name = call.function?.name || "unknown";
         const args = call.function?.arguments || "{}";
         // Force-flush any pending draft for this tool, then announce it right before execution.
         emitWriteDraft({ index: callIndex, name, arguments: args }, true);
         if (!announcedToolCalls.has(callIndex)) {
-          emit({ type: "tool_start", callIndex, name, position: callIndex + 1, total: calls.length });
+          emit({ type: "tool_start", callIndex, name, position: position + 1, total: calls.length });
         }
         emit({ type: "tool_args", callIndex, name, arguments: args });
         await flushStreamFrame(signal);
 
-        const { result, mutated, artifacts = [] } = await tools.execute(name, args);
+        const execution = await tools.execute(name, args);
+        const { result, artifacts = [] } = execution;
+        const toolOk = execution.ok !== false;
+        const toolMutated = Boolean(execution.mutated);
+        if (toolOk) successfulToolCount++;
+        if (toolOk && toolMutated) successfulMutationCount++;
+        if (toolOk && toolMutated && FILE_MUTATION_TOOLS.has(name)) successfulFileMutationCount++;
         if (name === "write_file") {
           const draft = extractWriteFileDraft(args);
           if (draft) emit({ type: "preview_draft_clear", path: draft.path });
@@ -302,11 +400,24 @@ export async function runAgent({ session, store, prompt, images = [], config, we
           const editedPath = extractEditFileDraftPath(args);
           if (editedPath) emit({ type: "frame_working_clear", path: editedPath });
         }
-        const toolMessage = { role: "tool", tool_call_id: call.id, name, content: result };
+        const toolMessage = {
+          role: "tool",
+          tool_call_id: call.id,
+          name,
+          content: formatToolReceipt({ name, result, ok: toolOk, mutated: toolMutated }),
+        };
         history.push(toolMessage);
         requestHistory.push(toolMessage);
         await store.saveHistory(session.id, history);
-        emit({ type: "tool_result", callIndex, name, result: presentToolResult(name, result), mutated });
+        emit({
+          type: "tool_result",
+          callIndex,
+          name,
+          result: presentToolResult(name, result),
+          ok: toolOk,
+          status: toolOk ? "success" : "failed",
+          mutated: toolMutated,
+        });
         capturedImages.push(...artifacts.filter((artifact) => artifact.kind === "image" && artifact.dataUrl));
       }
       if (capturedImages.length) {
@@ -335,11 +446,14 @@ export function isolateCreateFrameToolCall(message) {
   const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
   const createFrameCall = calls.find((call) => call.function?.name === "create_frame");
   if (!createFrameCall || calls.length === 1) {
-    return { changed: false, message, dropped: 0 };
+    return { changed: false, message, dropped: 0, droppedCalls: [], originalCalls: calls };
   }
+  const droppedCalls = calls.filter((call) => call !== createFrameCall);
   return {
     changed: true,
-    dropped: calls.length - 1,
+    dropped: droppedCalls.length,
+    droppedCalls,
+    originalCalls: calls,
     message: { ...message, tool_calls: [createFrameCall] },
   };
 }

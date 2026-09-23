@@ -1784,16 +1784,38 @@ function setToolArgs(block, args) {
   $(".tool-args", block).textContent = args || "";
 }
 
-function setToolResult(block, result, completed = false) {
+function setToolResult(block, result, completed = false, ok = true) {
+  block.classList.toggle("failed", completed && !ok);
   block.classList.toggle("running", !completed);
   $(".tool-result pre", block).textContent = result || "";
-  $(".tool-status", block).innerHTML = completed ? `<span class="tool-done">${escapeHtml(t("done"))}</span>` : renderThinkingDotsHtml();
+  $(".tool-status", block).innerHTML = completed
+    ? `<span class="tool-done">${escapeHtml(ok ? t("done") : "failed")}</span>`
+    : renderThinkingDotsHtml();
   refreshToolGroup(state.activeAssistantTurn);
 }
 
-function finalizeToolBlock(block, result) {
+function finalizeToolBlock(block, result, ok = true, status = "success") {
   if (!block) return;
-  setToolResult(block, result, true);
+  block.dataset.status = status;
+  block.classList.toggle("not-executed", status === "not_executed");
+  setToolResult(block, result, true, ok);
+}
+
+function resetAssistantTurn() {
+  const turn = state.activeAssistantTurn;
+  if (!turn) return;
+  for (const block of turn.textBlocks) block.remove();
+  turn.textBlocks = [];
+  turn.wrapper.classList.add("pending");
+  state.activeToolBlocks = new Map();
+}
+
+function replaceAssistantContent(content) {
+  const turn = ensureAssistantTurn();
+  const block = turn.textBlocks.at(-1) || createTextSegment(turn);
+  block.dataset.rawContent = content;
+  block.innerHTML = renderMarkdown(content);
+  scrollChat(true);
 }
 
 function finalizeAssistantTurn(turn = state.activeAssistantTurn) {
@@ -1958,9 +1980,16 @@ async function sendPrompt(event) {
       } else if (eventData.type === "tool_result") {
         flushBufferedContent();
         const tool = state.activeToolBlocks.get(eventData.callIndex);
-        finalizeToolBlock(tool, eventData.result);
+        finalizeToolBlock(tool, eventData.result, eventData.ok !== false, eventData.status || "success");
         state.activeToolBlocks.delete(eventData.callIndex);
         if (eventData.mutated) schedulePreview();
+      } else if (eventData.type === "assistant_retry") {
+        flushBufferedContent();
+        resetAssistantTurn();
+        setWorkspaceStatus("working", "statusWorking");
+      } else if (eventData.type === "final_content") {
+        flushBufferedContent();
+        replaceAssistantContent(eventData.content || "");
       } else if (eventData.type === "frame_working") {
         // edit_file: signal that AI is working on this frame (drafting overlay).
         // Emitted while the model generates edit_file args, so the overlay shows
