@@ -54,6 +54,7 @@ export const config = {
     model: process.env.PRIMARY_MODEL || "deepseek-v4-flash",
     baseUrl: (process.env.PRIMARY_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
     reasoningEffort: resolveReasoningEffort(process.env.REASONING_EFFORT),
+    maxOutputTokens: toPositiveInt(process.env.AI_MAX_OUTPUT_TOKENS, 200000),
     maxIterations: toPositiveInt(process.env.AGENT_MAX_ITERATIONS, 50),
     requestLogging: toBoolean(process.env.LLM_REQUEST_LOGGING, false),
     contextOptimize: {
@@ -65,6 +66,7 @@ export const config = {
       model: process.env.MULTIMODAL_MODEL || "",
       baseUrl: (process.env.MULTIMODAL_BASE_URL || process.env.PRIMARY_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
       reasoningEffort: resolveReasoningEffort(process.env.REASONING_EFFORT),
+      maxOutputTokens: toPositiveInt(process.env.AI_MAX_OUTPUT_TOKENS, 200000),
     },
   },
 };

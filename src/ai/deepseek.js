@@ -1,11 +1,12 @@
 import { withAppIdentityHeaders } from "../config/app-headers.js";
 
 export class DeepSeekClient {
-  constructor({ apiKey, baseUrl, model, reasoningEffort = "none" }) {
+  constructor({ apiKey, baseUrl, model, reasoningEffort = "none", maxOutputTokens = 200000 }) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.model = model;
     this.reasoningEffort = reasoningEffort;
+    this.maxOutputTokens = maxOutputTokens;
   }
 
   async complete({ messages, tools, signal, onContent, onToolCall }) {
@@ -19,6 +20,7 @@ export class DeepSeekClient {
       body: JSON.stringify({
         model: this.model,
         messages,
+        max_tokens: this.maxOutputTokens,
         ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
         stream: true,
         stream_options: { include_usage: true },

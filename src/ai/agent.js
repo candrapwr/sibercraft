@@ -182,6 +182,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         baseUrl: iterationAi.baseUrl,
         model: iterationAi.model,
         reasoningEffort: iterationAi.reasoningEffort,
+        maxOutputTokens: iterationAi.maxOutputTokens,
       });
       const lastModel = modelsUsed.at(-1);
       if (!lastModel || lastModel.model !== iterationAi.model || lastModel.mode !== iterationAi.mode) {
@@ -208,6 +209,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
           request: {
             model: iterationAi.model,
             mode: iterationAi.mode,
+            max_tokens: iterationAi.maxOutputTokens,
             stream: true,
             stream_options: { include_usage: true },
             toolCount: conversational ? 0 : tools.schemas.length,
@@ -584,6 +586,7 @@ export function selectTurnAi(config, session, hasImages) {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: overrideModel || session.model || config.model,
+    maxOutputTokens: config.maxOutputTokens,
     mode: "primary",
   };
 }
