@@ -174,6 +174,12 @@ Canvas dapat di-pan dan di-zoom tanpa batas, menampung banyak frame sekaligus. L
 
 AI memutuskan kapan membuat frame baru lewat tool `create_frame`, memilih ukuran device (desktop/tablet/mobile) sesuai konteks permintaan, dan menulis isi file-nya. Sebagai fallback, bila AI lupa mendaftarkan frame, sistem otomatis membuat frame saat file HTML pertama kali ditulis.
 
+### Web search dan isi halaman
+
+Jika endpoint provider AI utama menggunakan host `idsiber.com`, AI mendapat tool `web_search` secara otomatis. Tool ini memakai endpoint Exa-compatible `https://api.idsiber.com/v1/generic/exa` dan API key yang sama dengan provider utama. Provider lain tidak mengaktifkan tool ini.
+
+Tool memiliki dua mode: `search` untuk mencari hingga lima sumber beserta URL, tanggal, penulis, dan highlight; lalu `content` untuk mengambil teks dari URL publik. AI memakai hasilnya untuk riset informasi terkini dan menyertakan URL sumber pada jawaban.
+
 ### Streaming live preview
 
 Saat AI membuat atau mengubah file, preview di frame bersangkutan ter-update secara bertahap (bukan hanya hasil akhir). Anda melihat proses pembangunan secara real-time.

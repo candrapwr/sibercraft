@@ -2,6 +2,7 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs
 import { dirname, join, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureWebpageScreenshot } from "../media/web-screenshot.js";
+import { executeWebSearch } from "../ai/web-search.js";
 
 export function createFileTools(workspaceDir, onMutation = () => {}, options = {}) {
   const tools = [
@@ -79,6 +80,40 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       const suffix = results.length >= limit ? `\n…(dibatasi ${limit} hasil, mungkin masih ada)` : "";
       return `${results.join("\n")}${suffix}`;
     }),
+    ...(options.webSearch?.enabled ? [
+      tool("web_search", "Search the web and read page content through the Siber Exa-compatible API. Use mode \"search\" with a query to find current information and source URLs (up to 5 results). Use mode \"content\" with a URL from the search results or the user to retrieve readable page text. Search returns titles, URLs, publication dates, authors, and highlights; content returns the page title, URL, and text.", {
+        type: "object",
+        properties: {
+          mode: {
+            type: "string",
+            enum: ["search", "content"],
+            description: "Use search to find relevant pages, then content to read a selected result.",
+          },
+          query: {
+            type: "string",
+            description: "Search query; required when mode is search.",
+          },
+          url: {
+            type: "string",
+            description: "Public http or https page URL; required when mode is content.",
+          },
+          maxCharacters: {
+            type: "integer",
+            minimum: 100,
+            maximum: 15000,
+            description: "Maximum extracted text length for mode content. Defaults to 500.",
+          },
+        },
+        required: ["mode"],
+        additionalProperties: false,
+      }, async (args) => ({
+        result: await executeWebSearch(args, {
+          endpoint: options.webSearch.endpoint,
+          apiKey: options.webSearch.apiKey,
+          signal: options.signal,
+        }),
+      })),
+    ] : []),
     tool("read_file", "Read a UTF-8 text file from the workspace. Use this before editing an existing file.", {
       type: "object",
       properties: {

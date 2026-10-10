@@ -193,9 +193,10 @@ function applyApiSettingsStaticText() {
     const hint = $("legend small", groups[1]);
     if (hint) hint.textContent = t("apiMultimodalLegendHint");
   }
-  // Field labels + placeholders (only for fields that aren't currently holding
-  // a "stored" key marker, which setApiKeyFieldState manages separately).
-  $$(".api-provider-group .field > span", dialog).forEach((label, index) => {
+  // Translate field labels. Exclude the extra API-key hint span: including it
+  // shifts the index sequence and assigns Endpoint/Model labels to the wrong
+  // controls when the language changes.
+  $$(".api-provider-group .field > span:not(.api-key-hint)", dialog).forEach((label, index) => {
     // Fields alternate: API key, Endpoint, Model (per group).
     if (index % 3 === 0) label.textContent = t("apiKeyLabel");
     else if (index % 3 === 1) label.textContent = t("apiEndpointLabel");
