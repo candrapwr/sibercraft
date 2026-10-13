@@ -15,6 +15,7 @@ export const state = {
   resizingPanel: false,
   activeAssistantTurn: null,
   activeToolBlocks: new Map(),
+  pendingToolIterationTurn: null,
   pendingImages: [],
   language: "en",
   workspaceStatusKey: "statusReady",

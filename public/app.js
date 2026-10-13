@@ -1527,6 +1527,7 @@ function renderHistory(history) {
   ui.chatMessages.replaceChildren();
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
+  state.pendingToolIterationTurn = null;
   if (!history.length) {
     const empty = document.createElement("div");
     empty.className = "chat-empty";
@@ -1544,6 +1545,13 @@ function renderHistory(history) {
       continue;
     }
     if (item.role === "assistant") {
+      // Tool iterations are transient activity. Keep their cards out of the
+      // saved transcript so reopening a chat shows only the final answer.
+      if ((item.toolCalls || []).length) {
+        toolTurn = null;
+        toolMap.clear();
+        continue;
+      }
       const turn = createAssistantTurn(false);
       if (item.content?.trim()) appendTextBlock(turn, item.content);
       for (const call of item.toolCalls || []) {
@@ -1774,6 +1782,7 @@ function appendToolBlock(turn, name, running = true) {
 
 function appendStreamingTool(name, callIndex) {
   const turn = ensureAssistantTurn();
+  turn.hasToolActivity = true;
   const existing = state.activeToolBlocks.get(callIndex);
   if (existing) return existing;
   const block = appendToolBlock(turn, name, true);
@@ -1830,8 +1839,17 @@ function finalizeAssistantTurn(turn = state.activeAssistantTurn) {
     return;
   }
   turn.wrapper.classList.remove("pending");
+  if (turn.hasToolActivity) state.pendingToolIterationTurn = turn;
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
+  scrollChat(true);
+}
+
+function discardCompletedToolIteration() {
+  const turn = state.pendingToolIterationTurn;
+  if (!turn) return;
+  turn.wrapper.remove();
+  state.pendingToolIterationTurn = null;
   scrollChat(true);
 }
 
@@ -1955,6 +1973,7 @@ async function sendPrompt(event) {
         sawAssistantOutput = true;
         onTurnStart();
       } else if (eventData.type === "content") {
+        discardCompletedToolIteration();
         sawAssistantOutput = true;
         bufferedDelta += eventData.delta;
         if (!streamRenderFrame) {
@@ -1966,6 +1985,7 @@ async function sendPrompt(event) {
           });
         }
       } else if (eventData.type === "tool_start") {
+        discardCompletedToolIteration();
         flushBufferedContent();
         sawAssistantOutput = true;
         appendStreamingTool(eventData.name, eventData.callIndex);
@@ -1989,6 +2009,7 @@ async function sendPrompt(event) {
         resetAssistantTurn();
         setWorkspaceStatus("working", "statusWorking");
       } else if (eventData.type === "final_content") {
+        discardCompletedToolIteration();
         flushBufferedContent();
         replaceAssistantContent(eventData.content || "");
       } else if (eventData.type === "frame_working") {

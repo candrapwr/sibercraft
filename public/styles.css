@@ -387,9 +387,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
    Counter-scaled via --hud-scale so buttons stay crisp at any zoom. */
 .frame-hud { position: absolute; bottom: 100%; right: 0; display: flex; align-items: center; gap: 6px; padding: 0 0 8px 0; opacity: 0; pointer-events: none; transition: opacity .12s; transform-origin: bottom right; transform: scale(var(--hud-scale, 1)); }
 .canvas-frame:hover .frame-hud, .canvas-frame.selected .frame-hud { opacity: 1; pointer-events: auto; }
-/* Device selector — vertical button group overlaid at top-left INSIDE the frame.
-   Appears on hover/select so it doesn't cover preview content while idle. */
-.frame-devices { position: absolute; top: 8px; left: 8px; z-index: 6; display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid rgba(208,220,212,.16); border-radius: 9px; background: rgba(9,14,12,.92); backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .12s; transform-origin: top left; transform: scale(var(--hud-scale, 1)); }
+/* Device selector sits just outside each preview frame, on its left edge. */
+.frame-devices { position: absolute; top: 0; left: calc(-42px * var(--hud-scale, 1)); z-index: 6; display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid rgba(208,220,212,.16); border-radius: 9px; background: rgba(9,14,12,.92); backdrop-filter: blur(14px); box-shadow: 0 6px 20px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .12s; transform-origin: top left; transform: scale(var(--hud-scale, 1)); }
 .canvas-frame:hover .frame-devices, .canvas-frame.selected .frame-devices { opacity: 1; pointer-events: auto; }
 .frame-devices button { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0; border: 0; border-radius: 6px; color: #90a197; background: transparent; cursor: pointer; }
 .frame-devices button:hover { color: #f4fbf6; background: rgba(255,255,255,.08); }

@@ -50,10 +50,10 @@ function init() {
   // Zoom controls (header + floating).
   $("#cvZoomIn")?.addEventListener("click", () => canvas._internal.zoomBy(1.2));
   $("#cvZoomOut")?.addEventListener("click", () => canvas._internal.zoomBy(1 / 1.2));
-  $("#cvZoomFit")?.addEventListener("click", () => canvas._internal.fitAll());
+  $("#cvZoomFit")?.addEventListener("click", arrangeAndFitAll);
   $("#cvCtrlZoomIn")?.addEventListener("click", () => canvas._internal.zoomBy(1.2));
   $("#cvCtrlZoomOut")?.addEventListener("click", () => canvas._internal.zoomBy(1 / 1.2));
-  $("#cvCtrlZoomFit")?.addEventListener("click", () => canvas._internal.fitAll());
+  $("#cvCtrlZoomFit")?.addEventListener("click", arrangeAndFitAll);
 
   dockToggleEl?.addEventListener("click", toggleDock);
   $("#cvUndoButton")?.addEventListener("click", undoFromCanvas);
@@ -66,6 +66,11 @@ function init() {
   window.__sibercraftExportFrameHtml = exportFrameHtml;
   // Confirm dialog hook for closing a frame (#3).
   window.__sibercraftConfirmCloseFrame = confirmCloseFrame;
+}
+
+function arrangeAndFitAll() {
+  canvas._internal.arrangeAll();
+  canvas._internal.fitAll();
 }
 
 async function enter({ session: s, chatMount, chatResizeHandle: handle }) {

@@ -112,6 +112,7 @@ function addFrame(state) {
   viewportEl.appendChild(el);
   frames.set(state.id, { el, state: fullState, dirty: false });
   if (emptyHintEl) emptyHintEl.hidden = frames.size > 0;
+  if (!selectedId) selectFrame(state.id);
   return fullState;
 }
 
@@ -154,7 +155,6 @@ function buildFrameEl(state) {
     <div class="frame-overlay" aria-hidden="true"><div class="frame-overlay-spinner"></div></div>
   `;
   applyFrameBox(el, state);
-  // Wire HUD buttons (delegation handled at area level; here we set initial device active state).
   syncDeviceButtons(el, state.device);
   return el;
 }
@@ -168,14 +168,14 @@ function applyFrameBox(el, state) {
   if (labelEl) labelEl.textContent = frameTitle(state.file);
 }
 
-function syncDeviceButtons(el, device) {
-  el.querySelectorAll("[data-device]").forEach((b) =>
-    b.classList.toggle("active", b.dataset.device === device)
-  );
-}
-
 function frameTitle(file) {
   return String(file || "").replace(/\.html?$/i, "").replace(/[/_-]+/g, " ").trim() || "preview";
+}
+
+function syncDeviceButtons(el, device) {
+  el.querySelectorAll("[data-device]").forEach((button) =>
+    button.classList.toggle("active", button.dataset.device === device)
+  );
 }
 
 function updateFrame(id, patch) {
@@ -302,7 +302,7 @@ function fitAll() {
   }
   const fw = Math.max(1, maxX - minX);
   const fh = Math.max(1, maxY - minY);
-  const pad = 40;
+  const pad = 88;
   const zx = (r.width - pad * 2) / fw;
   const zy = (r.height - pad * 2) / fh;
   const z = clampZoom(Math.min(zx, zy, MAX_ZOOM));
@@ -310,6 +310,30 @@ function fitAll() {
   view.panX = (r.width - fw * z) / 2 - minX * z;
   view.panY = (r.height - fh * z) / 2 - minY * z;
   applyTransform();
+}
+
+/** Reset frame positions to the auto-layout grid, keeping their current sizes. */
+function arrangeAll() {
+  if (!frames.size) return;
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  let index = 0;
+  for (const [id, frame] of frames) {
+    if (index > 0 && index % LAYOUT_COL === 0) {
+      x = 0;
+      y += rowHeight + LAYOUT_GAP_Y;
+      rowHeight = 0;
+    }
+    frame.state.x = x;
+    frame.state.y = y;
+    applyFrameBox(frame.el, frame.state);
+    frame.dirty = true;
+    flushPersist(id);
+    x += frame.state.w + LAYOUT_GAP_X;
+    rowHeight = Math.max(rowHeight, frame.state.h);
+    index++;
+  }
 }
 
 function resetView() {
@@ -385,7 +409,8 @@ function zoomToFit() {
 // --- auto-layout for new frames ---
 // Place frames in a row; wrap to next row every LAYOUT_COL frames.
 const LAYOUT_COL = 3;
-const LAYOUT_GAP = 80;
+const LAYOUT_GAP_X = 140;
+const LAYOUT_GAP_Y = 80;
 function nextLayoutPosition(device = "desktop") {
   const count = frames.size;
   const col = count % LAYOUT_COL;
@@ -393,8 +418,8 @@ function nextLayoutPosition(device = "desktop") {
   // Use the new frame's own device size so the slot fits it (not always desktop).
   const size = DEVICE_SIZE[device] || DEVICE_SIZE.desktop;
   return {
-    x: col * (size.w + LAYOUT_GAP),
-    y: row * (size.h + LAYOUT_GAP),
+    x: col * (size.w + LAYOUT_GAP_X),
+    y: row * (size.h + LAYOUT_GAP_Y),
   };
 }
 
@@ -484,12 +509,11 @@ function onPointerUp(e) {
   if (areaEl?.hasPointerCapture?.(e.pointerId)) areaEl.releasePointerCapture(e.pointerId);
 }
 
-/** Handle HUD button clicks (device, refresh, open, export, close) + frame selection. */
+/** Handle frame action buttons + frame selection. */
 function onAreaClick(e) {
   const frameEl = e.target.closest(".canvas-frame");
   if (!frameEl) return;
   const id = frameEl.dataset.frameId;
-  // Device buttons (left-top, vertical group).
   const deviceBtn = e.target.closest("[data-device]");
   if (deviceBtn) {
     updateFrame(id, { device: deviceBtn.dataset.device });
@@ -600,6 +624,7 @@ canvas._internal = {
   loadFrameSrcs,
   applyTransform,
   fitAll,
+  arrangeAll,
   resetView,
   zoomBy,
   zoomToFrame,

@@ -323,11 +323,6 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         emit({ type: "final_content", content: ACTION_BLOCKED_MESSAGE });
       }
       if (isFinalResponse) {
-        const compact = compactFinalResponse(completion.message.content || "Selesai.");
-        if (compact !== completion.message.content) {
-          completion.message.content = compact;
-          emit({ type: "final_content", content: compact });
-        }
         completion.message.models_used = modelsUsed;
       }
       if (!history.includes(completion.message)) {
