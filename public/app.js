@@ -454,6 +454,16 @@ async function handleLogout() {
   } catch {
     // Abaikan; tetap logout di sisi klien.
   }
+  // Cookie anon lama dihapus saat login, sehingga setelah logout server
+  // menerbitkan identitas anon BARU. Ambil sekarang supaya state.ownerId
+  // tidak memakai id user lama — tanpa ini project yang dibuat setelah
+  // logout salah dihitung bukan milik sendiri (read-only, chat disabled).
+  try {
+    const me = await api("/api/auth/me");
+    state.ownerId = me && me.isAnon ? me.ownerId : null;
+  } catch {
+    state.ownerId = null;
+  }
   applyUser(null);
   location.hash = "";
   showAuthView("login");
@@ -1556,6 +1566,10 @@ async function createSession(event) {
   try {
     const data = new FormData(ui.createForm);
     const session = await api("/api/sessions", { method: "POST", body: { name: data.get("name"), template: data.get("template") } });
+    // Identitas anon bisa berganti sejak boot (cookie kedaluwarsa/direset saat
+    // tab masih terbuka). Owner hasil resolve server adalah identitas client
+    // sekarang — sinkronkan agar project baru tidak dianggap read-only.
+    if (!state.user && session.ownerId) state.ownerId = session.ownerId;
     ui.createDialog.close();
     location.hash = `session=${session.id}`;
   } catch (error) {
