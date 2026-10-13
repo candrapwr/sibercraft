@@ -62,15 +62,22 @@ function applyLanguage() {
 function applyStaticText() {
   $$('[data-builder-text]').forEach((element) => { element.textContent = t(element.dataset.builderText); });
   $$("[data-create]").forEach((button) => {
-    if (button.closest(".hero-actions")) button.lastChild.textContent = t("startNewSession");
-    else if (button.closest(".section-actions")) button.textContent = `＋ ${t("createNew")}`;
-    else if (button.closest(".empty-sessions")) button.lastChild.textContent = t("createFirstSession");
+    const label = button.querySelector(".btn-label");
+    if (!label) return;
+    if (button.closest(".hero-actions")) label.textContent = t("startNewSession");
+    else if (button.closest(".section-actions")) label.textContent = t("createNew");
+    else if (button.closest(".empty-sessions")) label.textContent = t("createFirstSession");
   });
   $(".landing-hero h1").innerHTML = state.language === "id" ? 'Dari ide menjadi<br><em>interface nyata.</em>' : 'From ideas to<br><em>real interfaces.</em>';
   $(".hero-copy").textContent = state.language === "id"
     ? "Rancang mockup, dashboard, chart, dan diagram melalui percakapan. Lihat setiap perubahan secara langsung, revisi dengan cepat, lalu export hasilnya."
     : "Design mockups, dashboards, charts, and diagrams through conversation. See every change live, revise quickly, then export the result.";
-  $(".hero-actions a").childNodes[0].textContent = `${t("viewWorkspace")} `;
+  const heroBadgeText = $(".hero-badge-text");
+  if (heroBadgeText) heroBadgeText.textContent = t("heroBadge");
+  const heroAnchor = $(".hero-actions a");
+  if (heroAnchor) heroAnchor.querySelector(".btn-label").textContent = t("viewWorkspace");
+  const heroStatKeys = { live: "heroStatLive", history: "heroStatHistory", export: "heroStatExport" };
+  $$("[data-hero-stat]").forEach((element) => { element.textContent = t(heroStatKeys[element.dataset.heroStat]); });
   $(".hero-capabilities").setAttribute("aria-label", state.language === "id" ? "Fitur utama" : "Key features");
   $(".product-message.user-preview").textContent = state.language === "id"
     ? "Buat dashboard analytics modern dengan chart dan tabel transaksi."
@@ -78,8 +85,10 @@ function applyStaticText() {
   $(".product-live").lastChild.textContent = ` ${t("live")}`;
   $(".product-tool small").textContent = t("writingInterfaceFiles");
   $(".product-composer span").textContent = state.language === "id" ? "Jelaskan perubahan..." : "Describe the changes...";
-  $(".floating-chip.chip-top").lastChild.textContent = ` ${t("generatingUi")}`;
-  $(".floating-chip.chip-bottom").lastChild.textContent = ` ${t("previewUpdated")}`;
+  const chipTop = $(".floating-chip.chip-top .chip-text");
+  if (chipTop) chipTop.textContent = ` ${t("generatingUi")}`;
+  const chipBottom = $(".floating-chip.chip-bottom .chip-text");
+  if (chipBottom) chipBottom.textContent = ` ${t("previewUpdated")}`;
   // Landing sections: "My projects" (logged-in) + "Public projects".
   if (ui.myProjectsTitle) ui.myProjectsTitle.textContent = t("myProjectsTitle");
   if (ui.myProjectsCopy) ui.myProjectsCopy.textContent = t("myProjectsCopy");

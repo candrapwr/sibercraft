@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark light">
+  <meta name="color-scheme" content="light">
   <title>SiberCraft — AI Mockup Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/ink-paper.css">
   <link rel="stylesheet" href="/builder.css">
@@ -231,7 +234,11 @@
   <section id="sessionsView" class="sessions-view">
     <header class="landing-nav">
       <div class="landing-nav-inner">
-        <a class="brand" href="#" aria-label="SiberCraft home"><span class="brand-mark">S</span><span>SiberCraft</span><small>AI workspace</small></a>
+        <a class="brand" href="#" aria-label="SiberCraft home">
+          <span class="brand-mark" aria-hidden="true">S</span>
+          <span class="brand-name">SiberCraft</span>
+          <small>AI workspace</small>
+        </a>
         <div class="nav-actions">
           <div class="language-switch" aria-label="Language switch">
             <button type="button" class="language-option active" data-language-option="en">EN</button>
@@ -265,68 +272,111 @@
     <main class="landing-main">
       <section class="landing-hero">
         <div class="hero-content">
-          <div class="hero-badge"><span>✦</span> AI-powered design workspace</div>
+          <p class="hero-badge">
+            <i class="badge-dot" aria-hidden="true"></i>
+            <span class="hero-badge-text">AI-powered design workspace</span>
+          </p>
           <h1>From ideas to<br><em>real interfaces.</em></h1>
           <p class="hero-copy">Design mockups, dashboards, charts, and diagrams through conversation. See every change live, revise quickly, then export the result.</p>
           <div class="hero-actions">
-            <button class="button button-primary button-large" data-create><span>＋</span>Start new project</button>
-            <a class="button button-secondary button-large" href="#recentSessions">View project <span>↓</span></a>
+            <button class="button button-primary button-large" data-create>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="btn-label">Start new project</span>
+            </button>
+            <a class="button button-secondary button-large" href="#recentSessions">
+              <span class="btn-label">View projects</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"></path></svg>
+            </a>
           </div>
-          <div class="hero-capabilities" aria-label="Key features">
-            <span><i>01</i> Live preview</span>
-            <span><i>02</i> Project history</span>
-            <span><i>03</i> Export ready</span>
-          </div>
+          <ul class="hero-capabilities">
+            <li><i aria-hidden="true">01</i><span data-hero-stat="live">Live preview</span></li>
+            <li><i aria-hidden="true">02</i><span data-hero-stat="history">Project history</span></li>
+            <li><i aria-hidden="true">03</i><span data-hero-stat="export">Export ready</span></li>
+          </ul>
         </div>
 
         <div class="hero-product" aria-hidden="true">
           <div class="product-window">
             <div class="product-topbar">
               <span class="product-dots"><i></i><i></i><i></i></span>
-              <span class="product-address">sibercraft / workspace</span>
+              <span class="product-address">sibercraft — canvas</span>
               <span class="product-live"><i></i> Live</span>
             </div>
             <div class="product-body">
               <div class="product-chat">
                 <span class="product-label">PROMPT</span>
                 <div class="product-message user-preview">Build a modern analytics dashboard with charts and a transaction table.</div>
-                <div class="product-ai-line"><i></i><span></span><span></span></div>
-                <div class="product-tool"><span>⌘</span><div><b>3 tool calls</b><small>Writing interface files</small></div><i></i></div>
+                <div class="product-tool">
+                  <span class="tool-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13 6l-2 12"></path></svg></span>
+                  <div><b>3 tool calls</b><small>Writing interface files</small></div>
+                  <i class="tool-tick"></i>
+                </div>
                 <div class="product-composer"><span>Describe the changes...</span><b>↑</b></div>
               </div>
               <div class="product-preview">
-                <div class="mini-sidebar"><b>S</b><span></span><span></span><span></span></div>
-                <div class="mini-dashboard">
-                  <div class="mini-head"><div><small>OVERVIEW</small><strong>Analytics</strong></div><i></i></div>
-                  <div class="mini-stats"><span></span><span></span><span></span></div>
-                  <div class="mini-chart"><div class="chart-line"></div><i></i><i></i><i></i><i></i><i></i></div>
-                  <div class="mini-table"><span></span><span></span><span></span></div>
-                </div>
+                <figure class="mock-frame mock-desktop is-selected">
+                  <div class="mock-screen">
+                    <div class="mwire-nav"><b></b><span></span><span></span><span></span></div>
+                    <div class="mwire-hero"><div><span></span><span></span></div><i></i></div>
+                    <div class="mwire-stats"><u></u><u></u><u></u></div>
+                    <div class="mwire-chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                    <div class="mwire-rows"><span></span><span></span><span></span></div>
+                  </div>
+                  <figcaption>dashboard.html</figcaption>
+                  <span class="mock-handles"><i></i><i></i><i></i><i></i></span>
+                </figure>
+                <figure class="mock-frame mock-mobile is-drafting">
+                  <div class="mock-screen">
+                    <div class="mwire-stack"><span></span><span></span><span></span><b></b></div>
+                  </div>
+                  <figcaption>login.html</figcaption>
+                </figure>
+                <span class="mock-progress"><i></i>2 / 4</span>
+                <span class="mock-zoom">72%</span>
               </div>
             </div>
           </div>
-          <div class="floating-chip chip-top"><span>✦</span> Generating UI</div>
-          <div class="floating-chip chip-bottom"><i></i> Preview updated</div>
+          <div class="floating-chip chip-top">
+            <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"></path></svg></span>
+            <span class="chip-text"> Generating UI</span>
+          </div>
+          <div class="floating-chip chip-bottom"><i></i><span class="chip-text"> Preview updated</span></div>
         </div>
       </section>
 
       <section id="myProjects" class="sessions-section my-projects-section" hidden>
-        <div class="section-heading">
-          <div><p class="kicker">YOUR PROJECTS</p><h2 id="myProjectsTitle">My projects</h2><p class="section-copy" id="myProjectsCopy">Projects you own — fully editable, with private history and resources.</p></div>
-          <div class="section-actions"><span id="myProjectsCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
-        </div>
+        <header class="section-heading">
+          <div class="section-heading-left">
+            <p class="kicker">YOUR PROJECTS</p>
+            <h2 id="myProjectsTitle">My projects</h2>
+            <p class="section-copy" id="myProjectsCopy">Projects you own — fully editable, with private history and resources.</p>
+          </div>
+          <div class="section-actions">
+            <span id="myProjectsCount" class="count-label">0 projects</span>
+            <button class="section-create" data-create>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="btn-label">Create new</span>
+            </button>
+          </div>
+        </header>
         <div id="myProjectsGrid" class="session-grid"></div>
         <div id="emptyMyProjects" class="empty-sessions compact" hidden>
           <div><p class="kicker">START CREATING</p><h3>Your first project is waiting.</h3><p>Describe the interface you want and let the AI prepare the files and live preview.</p></div>
-          <button class="button button-primary" data-create><span>＋</span>Create first project</button>
+          <button class="button button-primary" data-create><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="btn-label">Create first project</span></button>
         </div>
       </section>
 
       <section id="recentSessions" class="sessions-section">
-        <div class="section-heading">
-          <div><p class="kicker" id="communityKicker">PUBLIC</p><h2 id="communityTitle">Public projects</h2><p class="section-copy">All conversations, previews, and resources are stored per project.</p></div>
-          <div class="section-actions"><span id="sessionCount" class="count-label">0 projects</span><button class="section-create" data-create>＋ Create new</button></div>
-        </div>
+        <header class="section-heading">
+          <div class="section-heading-left">
+            <p class="kicker" id="communityKicker">PUBLIC</p>
+            <h2 id="communityTitle">Public projects</h2>
+            <p class="section-copy">All conversations, previews, and resources are stored per project.</p>
+          </div>
+          <div class="section-actions">
+            <span id="sessionCount" class="count-label">0 projects</span>
+            <button class="section-create" data-create>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="btn-label">Create new</span>
+            </button>
+          </div>
+        </header>
         <div id="guestNotice" class="guest-notice" hidden>
           <div>
             <strong id="guestNoticeTitle">Log in to use SiberCraft for free</strong>
@@ -336,15 +386,28 @@
         </div>
         <div id="sessionGrid" class="session-grid"></div>
         <div id="emptySessions" class="empty-sessions" hidden>
-          <div class="empty-visual"><span>✦</span><i></i><i></i></div>
+          <div class="empty-visual" aria-hidden="true">
+            <span class="empty-frame"><i></i><i></i><i></i></span>
+          </div>
           <div><p class="kicker">START CREATING</p><h3>Your first project is waiting.</h3><p>Describe the interface you want and let the AI prepare the files and live preview.</p></div>
-          <button class="button button-primary" data-create><span>＋</span>Create first project</button>
+          <button class="button button-primary" data-create><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span class="btn-label">Create first project</span></button>
         </div>
       </section>
     </main>
     <footer class="landing-footer">
-      <div class="footer-brand"><span class="footer-mark">D</span><div><strong>datasiberLab</strong><small>Digital product &amp; AI experiments</small></div></div>
-      <div class="footer-contact"><span>Contact</span><a href="mailto:candrapwr@datasiber.com">candrapwr@datasiber.com</a></div>
+      <div class="footer-brand">
+        <span class="footer-mark" aria-hidden="true">D</span>
+        <div><strong>datasiberLab</strong><small>Digital product &amp; AI experiments</small></div>
+      </div>
+      <nav class="footer-links" aria-label="Site">
+        <a href="https://datasiber.com" target="_blank" rel="noreferrer">datasiber.com</a>
+        <a href="https://github.com/candrapwr/sibercraft" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="mailto:candrapwr@datasiber.com">Email</a>
+      </nav>
+      <div class="footer-meta">
+        <span>© 2026</span>
+        <span class="footer-contact"><span>Contact</span><a href="mailto:candrapwr@datasiber.com">candrapwr@datasiber.com</a></span>
+      </div>
     </footer>
   </section>
 
