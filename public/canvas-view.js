@@ -5,6 +5,8 @@
 //   from the chat stream, and persists frame position changes to the server.
 
 import { canvas } from "/canvas.js";
+import { setTip } from "/tooltip.js";
+import { translate } from "/i18n.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -127,6 +129,7 @@ async function enter({ session: s, chatMount, chatResizeHandle: handle }) {
 
   dockOpen = true;
   layoutEl.classList.remove("dock-collapsed");
+  updateDockToggle();
 }
 
 function leave() {
@@ -195,8 +198,15 @@ async function bootstrapFromFiles(sessionId) {
 function toggleDock() {
   dockOpen = !dockOpen;
   layoutEl.classList.toggle("dock-collapsed", !dockOpen);
+  updateDockToggle();
+}
+
+function updateDockToggle() {
+  const label = translate(document.documentElement.lang, dockOpen ? "collapseChat" : "expandChat");
   dockToggleEl.textContent = dockOpen ? "‹" : "›";
-  dockToggleEl.title = dockOpen ? "Collapse chat" : "Expand chat";
+  dockToggleEl.setAttribute("aria-expanded", String(dockOpen));
+  dockToggleEl.setAttribute("aria-label", label);
+  setTip(dockToggleEl, label);
 }
 
 function updateEmptyHint() {
@@ -391,8 +401,7 @@ async function exportFrameHtml(state) {
 async function exportAll() {
   if (!session) return;
   const btn = document.getElementById("cvExportAllButton");
-  let origText = null;
-  if (btn) { origText = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Exporting…"; }
+  const restoreButton = beginHeaderAction(btn, "exportPreparing");
   try {
     const res = await fetch(`/api/sessions/${session.id}/export/zip-all`);
     if (!res.ok) throw new Error("Export All gagal");
@@ -406,7 +415,7 @@ async function exportAll() {
   } catch (e) {
     alert(e.message);
   } finally {
-    if (btn && origText != null) { btn.disabled = false; btn.textContent = origText; }
+    restoreButton();
   }
 }
 
@@ -414,16 +423,34 @@ async function exportAll() {
 async function regenerateThumbnail() {
   if (!session) return;
   const btn = document.getElementById("cvThumbButton");
-  let origText = null;
-  if (btn) { origText = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Generating…"; }
+  const restoreButton = beginHeaderAction(btn, "thumbnailPreparing");
   try {
     const res = await fetch(`/api/sessions/${session.id}/regenerate-thumbnail`, { method: "POST" });
     if (!res.ok) throw new Error("Regenerate thumbnail gagal");
   } catch (e) {
     alert(e.message || "Gagal memperbarui thumbnail");
   } finally {
-    if (btn && origText != null) { btn.disabled = false; btn.textContent = origText; }
+    restoreButton();
   }
+}
+
+function beginHeaderAction(button, labelKey) {
+  const label = button?.querySelector("span");
+  const originalLabel = label?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.classList.add("is-busy");
+    button.setAttribute("aria-busy", "true");
+  }
+  if (label) label.textContent = translate(document.documentElement.lang, labelKey);
+  return () => {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove("is-busy");
+      button.removeAttribute("aria-busy");
+    }
+    if (label) label.textContent = originalLabel;
+  };
 }
 
 /** Confirm dialog before removing a frame — #3. Uses native confirm for MVP. */

@@ -146,7 +146,7 @@ function buildFrameEl(state) {
       <div class="hud-group hud-actions">
         <button type="button" data-act="refresh" data-tip="Refresh" data-tip-pos="bottom" aria-label="Refresh preview">↻</button>
         <button type="button" data-act="open" data-tip="Open in new tab" data-tip-pos="bottom" aria-label="Open in new tab">↗</button>
-        <button type="button" data-act="export" data-tip="Export image" data-tip-pos="bottom" aria-label="Export image">🖼</button>
+        <button type="button" data-act="export" data-tip="Export image" data-tip-pos="bottom" aria-label="Export image"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m3 16 5-5 6 6 3-3 4 4"/><circle cx="15" cy="8" r="1.5"/></svg></button>
         <button type="button" data-act="export-html" data-tip="Export HTML" data-tip-pos="bottom" aria-label="Export HTML">⇩</button>
         <button type="button" data-act="close" data-tip="Close frame" data-tip-pos="bottom" aria-label="Close frame">×</button>
       </div>
@@ -173,9 +173,10 @@ function frameTitle(file) {
 }
 
 function syncDeviceButtons(el, device) {
-  el.querySelectorAll("[data-device]").forEach((button) =>
-    button.classList.toggle("active", button.dataset.device === device)
-  );
+  el.querySelectorAll("[data-device]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.device === device);
+    button.setAttribute("aria-pressed", String(button.dataset.device === device));
+  });
 }
 
 function updateFrame(id, patch) {
@@ -346,6 +347,11 @@ function resetView() {
 /** Smoothly animate view from current state to target {panX,panY,zoom}. */
 function animateTo(target) {
   cancelAnim();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    Object.assign(view, target);
+    applyTransform();
+    return;
+  }
   animFrom = { panX: view.panX, panY: view.panY, zoom: view.zoom };
   animTo = target;
   animStart = performance.now();

@@ -6,6 +6,10 @@ import { MAX_IMAGE_BYTES, state, ui } from "/app-state.js";
 import { debounce, downloadBlob, escapeHtml, formatBytes, formatCompactTokens, readNdjson, renderMarkdown, safeDownloadName } from "/app-utils.js";
 
 let lightboxTrigger = null;
+let followLatestMessage = true;
+let activityTimer = null;
+let activityStartedAt = 0;
+let stopRequested = false;
 
 boot();
 
@@ -26,12 +30,13 @@ async function setLanguage(language) {
     setWorkspaceStatus(
       state.workspaceStatusKey === "statusError" || state.workspaceStatusKey === "statusExportError"
         ? "error"
-        : state.workspaceStatusKey === "statusWorking" || state.workspaceStatusKey === "statusLiveDraft" || state.workspaceStatusKey === "statusExportingImage"
+        : state.running || state.workspaceStatusKey === "statusWorking" || state.workspaceStatusKey === "statusLiveDraft" || state.workspaceStatusKey === "statusExportingImage"
           ? "working"
           : "ready",
       state.workspaceStatusKey,
     );
     renderSessions();
+    if (state.running) return;
     try {
       const history = await api(`/api/sessions/${state.session.id}/history`);
       renderHistory(history);
@@ -55,6 +60,7 @@ function applyLanguage() {
 }
 
 function applyStaticText() {
+  $$('[data-builder-text]').forEach((element) => { element.textContent = t(element.dataset.builderText); });
   $$("[data-create]").forEach((button) => {
     if (button.closest(".hero-actions")) button.lastChild.textContent = t("startNewSession");
     else if (button.closest(".section-actions")) button.textContent = `＋ ${t("createNew")}`;
@@ -127,9 +133,21 @@ function applyStaticText() {
   for (const id of ["cvZoomOut", "cvCtrlZoomOut"]) { const el = $("#" + id); if (el) { el.title = t("zoomOut"); el.setAttribute("aria-label", t("zoomOut")); setTip(el, t("zoomOut")); } }
   for (const id of ["cvZoomFit", "cvCtrlZoomFit"]) { const el = $("#" + id); if (el) { el.title = t("fitAllFrames"); el.setAttribute("aria-label", t("fitAllFrames")); setTip(el, t("fitAllFrames")); } }
   const dockToggle = $("#chatDockToggle");
-  if (dockToggle) { dockToggle.title = t("collapseChat"); dockToggle.setAttribute("aria-label", t("collapseChat")); setTip(dockToggle, t("collapseChat")); }
+  if (dockToggle) {
+    const open = !$("#canvasLayout").classList.contains("dock-collapsed");
+    const label = t(open ? "collapseChat" : "expandChat");
+    dockToggle.setAttribute("aria-label", label);
+    dockToggle.setAttribute("aria-expanded", String(open));
+    setTip(dockToggle, label);
+  }
   const cvExportAll = $("#cvExportAllButton");
-  if (cvExportAll) { cvExportAll.title = t("exportAll"); setTip(cvExportAll, t("exportAll")); const sp = $("span", cvExportAll); if (sp) sp.textContent = t("export"); }
+  if (cvExportAll) { cvExportAll.title = t("exportAll"); cvExportAll.setAttribute("aria-label", t("exportAll")); setTip(cvExportAll, t("exportAll")); const sp = $("span", cvExportAll); if (sp) sp.textContent = t("export"); }
+  const cvThumb = $("#cvThumbButton");
+  cvThumb.setAttribute("aria-label", t("refreshThumbnail"));
+  setTip(cvThumb, t("refreshThumbnail"));
+  $("span", cvThumb).textContent = t("thumbnail");
+  $("#cvUndoButton").setAttribute("aria-label", t("undoTitle"));
+  $("#cvUndoButton span").textContent = t("undo");
   const emptyTitle = $(".canvas-empty-hint b");
   const emptyBody = $(".canvas-empty-hint span");
   if (emptyTitle) emptyTitle.textContent = t("canvasEmptyTitle");
@@ -1184,8 +1202,25 @@ function bindEvents() {
   });
   ui.imageInput.addEventListener("change", () => addPendingImages(ui.imageInput.files).catch((error) => notify(error.message, true)));
   ui.chatMessages.addEventListener("click", (event) => {
+    const starter = event.target.closest("[data-starter-prompt]");
+    if (starter && !state.running && !state.readOnly) {
+      ui.promptInput.value = t(starter.dataset.starterPrompt);
+      autoResizePrompt();
+      ui.promptInput.focus();
+    }
     const image = event.target.closest(".message-images img");
     if (image) openImageLightbox(image);
+  });
+  ui.chatMessages.addEventListener("scroll", () => {
+    followLatestMessage = ui.chatMessages.scrollHeight - ui.chatMessages.scrollTop - ui.chatMessages.clientHeight < 60;
+    $("#chatJumpLatest").hidden = followLatestMessage;
+  }, { passive: true });
+  ui.chatMessages.addEventListener("wheel", (event) => {
+    if (event.deltaY < 0) followLatestMessage = false;
+  }, { passive: true });
+  $("#chatJumpLatest").addEventListener("click", () => {
+    followLatestMessage = true;
+    scrollChat(true);
   });
   ui.chatMessages.addEventListener("keydown", (event) => {
     const image = event.target.closest(".message-images img");
@@ -1524,6 +1559,8 @@ async function createSession(event) {
 }
 
 function renderHistory(history) {
+  followLatestMessage = true;
+  $("#chatJumpLatest").hidden = true;
   ui.chatMessages.replaceChildren();
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
@@ -1531,7 +1568,8 @@ function renderHistory(history) {
   if (!history.length) {
     const empty = document.createElement("div");
     empty.className = "chat-empty";
-    empty.innerHTML = `<span class="symbol">✦</span><h3>${escapeHtml(t("emptyChatTitle"))}</h3><p>${escapeHtml(t("emptyChatBody"))}</p>`;
+    empty.innerHTML = `<span class="symbol" aria-hidden="true">✦</span><h3>${escapeHtml(t("emptyChatTitle"))}</h3><p>${escapeHtml(t("emptyChatBody"))}</p>
+      ${state.readOnly ? "" : `<div class="starter-prompts">${[["◫", "starterLanding", "starterLandingPrompt"], ["▥", "starterDashboard", "starterDashboardPrompt"], ["▯", "starterMobile", "starterMobilePrompt"]].map(([icon, label, prompt]) => `<button class="starter-prompt" type="button" data-starter-prompt="${prompt}"><i aria-hidden="true">${icon}</i><span>${escapeHtml(t(label))}</span></button>`).join("")}</div>`}`;
     ui.chatMessages.append(empty);
     return;
   }
@@ -1695,7 +1733,7 @@ function createAssistantTurn(pending = true) {
   wrapper.className = `message assistant${pending ? " pending" : ""}`;
   const label = document.createElement("div");
   label.className = "message-label";
-  label.textContent = "FORMA AI";
+  label.textContent = "SiberCraft";
   const body = document.createElement("div");
   body.className = "message-body";
   wrapper.append(label, body);
@@ -1757,7 +1795,7 @@ function appendToolBlock(turn, name, running = true) {
     <button type="button" class="tool-head" aria-expanded="false">
       <span class="tool-chevron">⌄</span>
       <span class="tool-icon">⌘</span>
-      <span class="tool-name">${escapeHtml(name)}</span>
+      <span class="tool-name">${escapeHtml(toolLabel(name))}</span>
       <span class="tool-status">${running ? renderThinkingDotsHtml() : '<span class="tool-done">done</span>'}</span>
     </button>
     <div class="tool-content" hidden>
@@ -1799,7 +1837,7 @@ function setToolResult(block, result, completed = false, ok = true) {
   block.classList.toggle("running", !completed);
   $(".tool-result pre", block).textContent = result || "";
   $(".tool-status", block).innerHTML = completed
-    ? `<span class="tool-done">${escapeHtml(ok ? t("done") : "failed")}</span>`
+    ? `<span class="tool-done">${escapeHtml(ok ? t("done") : t("toolFailed"))}</span>`
     : renderThinkingDotsHtml();
   refreshToolGroup(state.activeAssistantTurn);
 }
@@ -1840,6 +1878,23 @@ function finalizeAssistantTurn(turn = state.activeAssistantTurn) {
   }
   turn.wrapper.classList.remove("pending");
   if (turn.hasToolActivity) state.pendingToolIterationTurn = turn;
+  else if (turn.textBlocks.length && !$(".message-actions", turn.body)) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "message-copy";
+    copy.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></svg><span>${escapeHtml(t("copyResponse"))}</span>`;
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(turn.textBlocks.map((block) => block.dataset.rawContent || "").join("\n\n"));
+        $("span", copy).textContent = t("responseCopied");
+        setTimeout(() => { $("span", copy).textContent = t("copyResponse"); }, 2000);
+      } catch { notify(t("copyFailed"), true); }
+    });
+    actions.append(copy);
+    turn.body.append(actions);
+  }
   state.activeAssistantTurn = null;
   state.activeToolBlocks = new Map();
   scrollChat(true);
@@ -1877,13 +1932,13 @@ function ensureToolGroup(turn) {
   const group = document.createElement("section");
   group.className = "tool-group";
   group.innerHTML = `
-    <button type="button" class="tool-group-head" aria-expanded="false">
+    <button type="button" class="tool-group-head" aria-expanded="true">
       <span class="tool-group-title">${escapeHtml(t("toolCalls"))}</span>
       <span class="tool-group-meta"></span>
       <span class="tool-group-status"></span>
-      <span class="tool-group-chevron">⌄</span>
+      <span class="tool-group-chevron rotated">⌄</span>
     </button>
-    <div class="tool-group-items" hidden></div>
+    <div class="tool-group-items"></div>
   `;
   const head = $(".tool-group-head", group);
   head.addEventListener("click", () => {
@@ -1904,6 +1959,8 @@ function refreshToolGroup(turn) {
   const total = turn.toolBlocks.length;
   if (!total) return;
   const running = turn.toolBlocks.filter((block) => block.classList.contains("running")).length;
+  const failed = turn.toolBlocks.some((block) => block.classList.contains("failed"));
+  $(".tool-group-title", turn.toolGroup).textContent = t(running ? "toolCalls" : failed ? "activityNeedsAttention" : "activityComplete");
   $(".tool-group-meta", turn.toolGroup).textContent = running
     ? t("toolsRunning", { total, running })
     : t("toolsTotal", { total });
@@ -1940,6 +1997,8 @@ async function sendPrompt(event) {
   if (images.length && !state.config?.multimodalConfigured) return notify(t("multimodalUnavailable"), true);
 
   state.running = true;
+  stopRequested = false;
+  followLatestMessage = true;
   setRunningUi(true);
   appendUserMessage(prompt, state.pendingImages.map((image) => ({ ...image, url: image.dataUrl })));
   state.pendingImages = [];
@@ -1969,10 +2028,12 @@ async function sendPrompt(event) {
     if (!response.ok) throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
     await readNdjson(response.body, (eventData) => {
       if (eventData.type === "assistant_start") {
+        setWorkspaceStatus("working", "assistantPreparing");
         ensureAssistantTurn();
         sawAssistantOutput = true;
         onTurnStart();
       } else if (eventData.type === "content") {
+        if (!state.activeToolBlocks.size) setWorkspaceStatus("working", "assistantWriting");
         discardCompletedToolIteration();
         sawAssistantOutput = true;
         bufferedDelta += eventData.delta;
@@ -2021,8 +2082,11 @@ async function sendPrompt(event) {
         // edit_file done: clear overlay + reload the frame to pick up the edit.
         if (eventData.path) onDraftClear(eventData.path);
       } else if (eventData.type === "iteration_end") {
+        flushBufferedContent();
         finalizeAssistantTurn();
+        setWorkspaceStatus("working", "assistantPreparing");
       } else if (eventData.type === "assistant_end") {
+        flushBufferedContent();
         finalizeAssistantTurn();
       } else if (eventData.type === "context_optimized") {
         notify(t("contextOptimized", { size: formatBytes(eventData.bytesSaved) }));
@@ -2070,12 +2134,17 @@ async function sendPrompt(event) {
     refreshPreview();
   } catch (error) {
     flushBufferedContent();
+    for (const tool of state.activeToolBlocks.values()) {
+      finalizeToolBlock(tool, stopRequested ? t("generationStopped") : error.message, false, stopRequested ? "not_executed" : "failed");
+    }
     finalizeAssistantTurn();
     const turn = createAssistantTurn(false);
-    appendTextBlock(turn, t("processFailed", { message: error.message }));
+    turn.wrapper.classList.add(stopRequested ? "message-notice" : "message-error");
+    appendTextBlock(turn, stopRequested ? t("generationStopped") : t("processFailed", { message: error.message }));
     finalizeAssistantTurn(turn);
-    setWorkspaceStatus("error", "statusError");
-    notify(error.message, true);
+    setWorkspaceStatus(stopRequested ? "ready" : "error", stopRequested ? "statusStopped" : "statusError");
+    if (!stopRequested) notify(error.message, true);
+    onTurnDone();
     refreshPreview();
   } finally {
     state.running = false;
@@ -2086,9 +2155,23 @@ async function sendPrompt(event) {
 }
 
 function setRunningUi(running) {
+  $(".chat-panel").classList.toggle("is-running", running);
+  $("#builderActivity").hidden = !running;
+  clearInterval(activityTimer);
+  activityTimer = null;
+  if (running) {
+    activityStartedAt = performance.now();
+    $("#builderActivityLabel").textContent = t("assistantPreparing");
+    $("#builderActivityTime").textContent = "0:00";
+    activityTimer = setInterval(() => {
+      const seconds = Math.floor((performance.now() - activityStartedAt) / 1000);
+      $("#builderActivityTime").textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    }, 1000);
+  }
   ui.promptInput.disabled = running;
   ui.sendButton.hidden = running;
   ui.stopButton.hidden = !running;
+  ui.stopButton.disabled = false;
   ui.undoButton.disabled = running || !state.session?.checkpointCount;
   ui.exportButton.disabled = running;
   ui.imageButton.disabled = running;
@@ -2140,8 +2223,15 @@ async function exportFullImage() {
 
 async function stopAgent() {
   if (!state.session) return;
+  stopRequested = true;
+  ui.stopButton.disabled = true;
+  setWorkspaceStatus("working", "statusStopping");
   try { await api(`/api/sessions/${state.session.id}/stop`, { method: "POST" }); }
-  catch (error) { notify(error.message, true); }
+  catch (error) {
+    stopRequested = false;
+    ui.stopButton.disabled = false;
+    notify(error.message, true);
+  }
 }
 
 function schedulePreview() {
@@ -2181,7 +2271,7 @@ function refreshPreview({ silent = false } = {}) {
 
 function autoResizePrompt() {
   ui.promptInput.style.height = "0px";
-  const nextHeight = Math.min(120, Math.max(44, ui.promptInput.scrollHeight));
+  const nextHeight = Math.min(140, Math.max(44, ui.promptInput.scrollHeight));
   ui.promptInput.style.height = `${nextHeight}px`;
 }
 
@@ -2325,8 +2415,12 @@ async function deleteSessionRecord(session) {
 
 function setWorkspaceStatus(kind, labelKey) {
   state.workspaceStatusKey = labelKey;
-  ui.workspaceStatus.className = `workspace-status ${kind}`;
-  $("span", ui.workspaceStatus).textContent = t(labelKey);
+  for (const status of [ui.workspaceStatus, $("#cvStatus")]) {
+    if (!status) continue;
+    status.className = `workspace-status ${kind}`;
+    $("span", status).textContent = t(labelKey);
+  }
+  if (state.running) $("#builderActivityLabel").textContent = t(labelKey);
 }
 
 async function api(path, options = {}) {
@@ -2353,10 +2447,11 @@ function notify(message, error = false) {
 
 function scrollChat(immediate = false) {
   const update = () => {
-    ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+    if (followLatestMessage) ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+    $("#chatJumpLatest").hidden = ui.chatMessages.scrollHeight - ui.chatMessages.scrollTop - ui.chatMessages.clientHeight < 60;
   };
   if (immediate) update();
   else requestAnimationFrame(update);
 }
-function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile"), capture_webpage_screenshot: t("toolCaptureWebpage"), create_frame: t("toolCreateFrame") })[name] || name; }
+function toolLabel(name) { return ({ list_dir: t("toolListDir"), read_file: t("toolReadFile"), write_file: t("toolWriteFile"), edit_file: t("toolEditFile"), copy_file: t("toolCopyFile"), delete_file: t("toolDeleteFile"), delete_frame: t("toolDeleteFrame"), grep: t("toolFindContent"), web_search: t("toolWebSearch"), capture_webpage_screenshot: t("toolCaptureWebpage"), create_frame: t("toolCreateFrame") })[name] || name; }
 function formatDate(value) { return new Intl.DateTimeFormat(state.language === "id" ? "id-ID" : "en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
