@@ -10,11 +10,16 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, posix, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
 const DEVICE_SIZES = new Set(["desktop", "tablet", "mobile"]);
+const FRAME_DEDUPE_MIGRATION = "deduplicate-duplicate-frames-v1";
+const FRAME_ARRANGE_MIGRATION = "arrange-duplicate-frame-positions-v1";
+const FRAME_LAYOUT_COLS = 3;
+const FRAME_LAYOUT_GAP_X = 140;
+const FRAME_LAYOUT_GAP_Y = 80;
 // Pixel dimensions per device label. Mirror of frontend DEVICE_SIZE (canvas.js).
 // Used by the thumbnail layout builder to size frames server-side.
 export const DEVICE_SIZE = {
@@ -30,11 +35,194 @@ export function frameDimensions(frame) {
 
 export class SessionStore {
   constructor(dataDir) {
+    this.dataDir = dataDir;
     this.root = join(dataDir, "sessions");
   }
 
   async init() {
     await mkdir(this.root, { recursive: true });
+  }
+
+  /**
+   * One-time cleanup for sessions that contain multiple frames for the same
+   * HTML file. Each changed session is backed up before its frame list changes.
+   */
+  async migrateDuplicateFramesOnce({ dryRun = false } = {}) {
+    const migrationDir = join(this.dataDir, "migrations");
+    const markerPath = join(migrationDir, `${FRAME_DEDUPE_MIGRATION}.json`);
+    let previousReport = null;
+    try {
+      previousReport = JSON.parse(await readFile(markerPath, "utf8"));
+      if (previousReport?.version !== FRAME_DEDUPE_MIGRATION) previousReport = null;
+      if (!dryRun && previousReport) {
+        return { ran: false, alreadyApplied: true, report: previousReport };
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+
+    const backupDir = join(migrationDir, "backups", FRAME_DEDUPE_MIGRATION);
+    const report = {
+      version: FRAME_DEDUPE_MIGRATION,
+      mode: dryRun ? "dry-run" : "apply",
+      scannedAt: new Date().toISOString(),
+      sessionsScanned: 0,
+      sessionsWithDuplicates: 0,
+      sessionsChanged: 0,
+      duplicateFramesToRemove: 0,
+      duplicateFramesRemoved: 0,
+      duplicateGroups: [],
+      previousDuplicateGroups: previousReport?.duplicateGroups || [],
+      backupDir,
+    };
+
+    const entries = await readdir(this.root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !SESSION_ID.test(entry.name)) continue;
+
+      let raw;
+      let session;
+      try {
+        raw = await readFile(join(this.sessionDir(entry.name), "session.json"), "utf8");
+        session = JSON.parse(raw);
+      } catch (error) {
+        if (error.code === "ENOENT" || error instanceof SyntaxError) continue;
+        throw error;
+      }
+      report.sessionsScanned++;
+
+      const frames = Array.isArray(session.frames) ? session.frames : [];
+      const byFile = new Map();
+      frames.forEach((frame, index) => {
+        const file = normalizeFrameFile(frame?.file);
+        if (!file) return;
+        if (!byFile.has(file)) byFile.set(file, []);
+        byFile.get(file).push({ frame, index });
+      });
+
+      const keepIndexes = new Set(frames.map((_, index) => index));
+      for (const [file, group] of byFile) {
+        if (group.length < 2) continue;
+        const dated = group
+          .map((item) => ({ ...item, timestamp: Date.parse(item.frame.createdAt || "") }))
+          .filter((item) => Number.isFinite(item.timestamp))
+          .sort((a, b) => a.timestamp - b.timestamp || a.index - b.index);
+        const keeper = dated[0] || group[0];
+        const removed = group.filter((item) => item.index !== keeper.index);
+        for (const item of removed) keepIndexes.delete(item.index);
+        report.duplicateGroups.push({
+          sessionId: entry.name,
+          file,
+          keptFrameId: keeper.frame.id || null,
+          removedFrameIds: removed.map((item) => item.frame.id || null),
+        });
+      }
+
+      const nextFrames = frames.filter((_, index) => keepIndexes.has(index));
+      if (nextFrames.length === frames.length) continue;
+      const duplicateCount = frames.length - nextFrames.length;
+      report.sessionsWithDuplicates++;
+      report.duplicateFramesToRemove += duplicateCount;
+      if (dryRun) continue;
+
+      await mkdir(backupDir, { recursive: true });
+      const backupPath = join(backupDir, `${entry.name}.session.json`);
+      try {
+        await writeFile(backupPath, raw, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      } catch (error) {
+        // A previous interrupted run may already have saved the original file.
+        if (error.code !== "EEXIST") throw error;
+      }
+
+      await this.update(entry.name, { frames: nextFrames }, { preserveUpdatedAt: true });
+      report.sessionsChanged++;
+      report.duplicateFramesRemoved += duplicateCount;
+    }
+
+    if (!dryRun) {
+      report.appliedAt = new Date().toISOString();
+      await mkdir(migrationDir, { recursive: true });
+      await atomicJson(markerPath, report);
+    }
+    return { ran: true, report };
+  }
+
+  /** Arrange positions for sessions affected by duplicate-frame cleanup. */
+  async arrangeDuplicateFramePositionsOnce({ sessionIds = [], dryRun = false, removeFrameIdsBySession = {} } = {}) {
+    const migrationDir = join(this.dataDir, "migrations");
+    const markerPath = join(migrationDir, `${FRAME_ARRANGE_MIGRATION}.json`);
+    if (!dryRun) {
+      try {
+        const marker = JSON.parse(await readFile(markerPath, "utf8"));
+        if (marker?.version === FRAME_ARRANGE_MIGRATION) {
+          return { ran: false, alreadyApplied: true, report: marker };
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+    }
+
+    const backupDir = join(migrationDir, "backups", FRAME_ARRANGE_MIGRATION);
+    const report = {
+      version: FRAME_ARRANGE_MIGRATION,
+      mode: dryRun ? "dry-run" : "apply",
+      scannedAt: new Date().toISOString(),
+      sessionsScanned: 0,
+      sessionsToArrange: 0,
+      sessionsArranged: 0,
+      framesToMove: 0,
+      framesMoved: 0,
+      positionChanges: [],
+      backupDir,
+    };
+    const ids = [...new Set(sessionIds.filter((id) => SESSION_ID.test(String(id))))];
+
+    for (const id of ids) {
+      let raw;
+      let session;
+      try {
+        raw = await readFile(join(this.sessionDir(id), "session.json"), "utf8");
+        session = JSON.parse(raw);
+      } catch (error) {
+        if (error.code === "ENOENT" || error instanceof SyntaxError) continue;
+        throw error;
+      }
+      report.sessionsScanned++;
+
+      const frames = Array.isArray(session.frames) ? session.frames : [];
+      const removeIds = new Set(removeFrameIdsBySession[id] || []);
+      const framesToArrange = frames.filter((frame) => !removeIds.has(frame.id));
+      const arranged = arrangeFramePositions(framesToArrange);
+      const moved = arranged.filter((frame, index) => frame.x !== framesToArrange[index].x || frame.y !== framesToArrange[index].y);
+      if (!moved.length) continue;
+
+      report.sessionsToArrange++;
+      report.framesToMove += moved.length;
+      report.positionChanges.push({
+        sessionId: id,
+        frames: moved.map(({ id: frameId, file, x, y }) => ({ frameId: frameId || null, file, x, y })),
+      });
+      if (dryRun) continue;
+
+      await mkdir(backupDir, { recursive: true });
+      const backupPath = join(backupDir, `${id}.session.json`);
+      try {
+        await writeFile(backupPath, raw, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+
+      await this.update(id, { frames: arranged }, { preserveUpdatedAt: true });
+      report.sessionsArranged++;
+      report.framesMoved += moved.length;
+    }
+
+    if (!dryRun) {
+      report.appliedAt = new Date().toISOString();
+      await mkdir(migrationDir, { recursive: true });
+      await atomicJson(markerPath, report);
+    }
+    return { ran: true, report };
   }
 
   /**
@@ -210,9 +398,14 @@ export class SessionStore {
     return this.readSession(id);
   }
 
-  async update(id, patch) {
+  async update(id, patch, { preserveUpdatedAt = false } = {}) {
     const current = await this.get(id);
-    const next = { ...current, ...patch, id: current.id, updatedAt: new Date().toISOString() };
+    const next = {
+      ...current,
+      ...patch,
+      id: current.id,
+      updatedAt: preserveUpdatedAt ? current.updatedAt : new Date().toISOString(),
+    };
     await atomicJson(join(this.sessionDir(id), "session.json"), next);
     return next;
   }
@@ -224,9 +417,13 @@ export class SessionStore {
   async addFrame(id, { file, device = "desktop" }) {
     const current = await this.get(id);
     const frames = Array.isArray(current.frames) ? [...current.frames] : [];
+    const normalizedFile = normalizeFrameFile(file);
+    const existing = frames.find((frame) => normalizeFrameFile(frame.file) === normalizedFile);
+    if (existing) return { ...existing, reused: true };
+
     const frame = {
       id: randomUUID(),
-      file: String(file),
+      file: normalizedFile,
       device: DEVICE_SIZES.has(device) ? device : "desktop",
       x: 0,
       y: 0,
@@ -399,6 +596,18 @@ export class SessionStore {
     }
   }
 
+  /** Thumbnail cache version for URL cache-busting without reading its bytes. */
+  async thumbnailVersion(id) {
+    const path = this.thumbPath(id);
+    try {
+      const info = await stat(path);
+      return info.isFile() ? info.mtimeMs : null;
+    } catch (error) {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    }
+  }
+
   /** Tulis (overwrite) thumbnail cache. */
   async writeThumbnail(id, buffer) {
     await this.get(id);
@@ -448,6 +657,34 @@ async function walk(dir, onFile) {
 export function isPublicOwner(ownerId) {
   if (!ownerId) return true;
   return String(ownerId).startsWith("anon-");
+}
+
+function normalizeFrameFile(file) {
+  const value = String(file ?? "").replace(/\\/g, "/");
+  if (!value) return "";
+  const normalized = posix.normalize(value);
+  return normalized === "." ? "" : normalized.replace(/^\.\//, "");
+}
+
+function arrangeFramePositions(frames) {
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+
+  return frames.map((frame, index) => {
+    if (index > 0 && index % FRAME_LAYOUT_COLS === 0) {
+      x = 0;
+      y += rowHeight + FRAME_LAYOUT_GAP_Y;
+      rowHeight = 0;
+    }
+    const size = frameDimensions(frame);
+    const width = Number.isFinite(frame.w) && frame.w > 0 ? frame.w : size.w;
+    const height = Number.isFinite(frame.h) && frame.h > 0 ? frame.h : size.h;
+    const arranged = { ...frame, x, y };
+    x += width + FRAME_LAYOUT_GAP_X;
+    rowHeight = Math.max(rowHeight, height);
+    return arranged;
+  });
 }
 
 async function atomicJson(path, value) {

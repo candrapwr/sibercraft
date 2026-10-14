@@ -1573,7 +1573,7 @@ function renderSessionCard(session) {
     // Pakai opacity (bukan hidden) supaya <img> langsung trigger load
     // dan tidak dianggap "below fold" oleh lazy-load heuristic.
     thumb.style.opacity = "0";
-    thumb.src = `/api/sessions/${session.id}/thumbnail?v=${encodeURIComponent(session.updatedAt || "")}`;
+    thumb.src = `/api/sessions/${session.id}/thumbnail?v=${encodeURIComponent(session.thumbnailVersion ?? session.updatedAt ?? "")}`;
     thumb.addEventListener("load", () => {
       if (thumb.naturalWidth > 0 && thumb.naturalHeight > 0) {
         thumb.style.opacity = "1";

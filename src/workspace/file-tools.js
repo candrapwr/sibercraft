@@ -265,7 +265,10 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
             return { result: `Error: file harus berakhiran .html atau .htm (diterima: ${file})` };
           }
           const frame = await options.onCreateFrame({ file: cleanFile, device });
-          return { result: `Frame dibuat untuk ${cleanFile} (device: ${frame.device}). Sekarang tulis isi file tersebut dengan write_file.`, frame };
+          const result = frame?.reused
+            ? `Frame yang sudah ada dipakai untuk ${cleanFile} (device: ${frame.device}). Jangan buat frame kedua; lanjutkan dengan write_file bila perlu.`
+            : `Frame dibuat untuk ${cleanFile} (device: ${frame.device}). Sekarang tulis isi file tersebut dengan write_file.`;
+          return { result, frame };
         },
         true,
       ),

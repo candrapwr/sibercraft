@@ -285,6 +285,7 @@ async function handleApi(request, response, url, user) {
     const enriched = await Promise.all(sessions.map(async (session) => ({
       ...session,
       checkpointCount: await store.checkpointCount(session.id),
+      thumbnailVersion: await store.thumbnailVersion(session.id),
     })));
     // Lazy backfill: untuk session yang punya frame tapi belum punya thumbnail,
     // generate di background (best-effort). Berguna untuk project existing yang

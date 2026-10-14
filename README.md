@@ -287,6 +287,21 @@ npm test       # menjalankan test suite
 
 Secara default aplikasi berjalan di `http://localhost:3000`.
 
+### Migrasi frame duplikat
+
+Migrasi frame lama dijalankan eksplisit, bukan otomatis saat server mulai. Jalankan dari direktori project dengan konfigurasi `.env` dan `DATA_DIR` yang sama seperti server produksi. Aktifkan maintenance mode agar perubahan sesi tidak berbenturan dengan chat yang sedang berjalan. Jika memakai `--thumbnails`, server aplikasi harus tetap hidup dan dapat diakses dari mesin yang menjalankan script melalui `127.0.0.1:<PORT>`; maintenance mode tetap memblokir trafik pengguna, sementara Chrome/Chromium di server dipakai untuk merender thumbnail.
+
+```bash
+npm run migrate:duplicate-frames -- --dry-run  # tampilkan rencana; tidak mengubah data
+npm run migrate:duplicate-frames -- --apply     # backup session.json lalu hapus frame duplikat
+npm run migrate:duplicate-frames -- --dry-run --arrange  # preview perubahan posisi juga
+npm run migrate:duplicate-frames -- --apply --arrange     # hapus duplikat lalu tata ulang posisinya
+npm run migrate:duplicate-frames -- --dry-run --arrange --thumbnails  # preview termasuk sesi yang thumbnail-nya akan dibuat ulang
+npm run migrate:duplicate-frames -- --apply --arrange --thumbnails     # deduplikasi, tata posisi, dan perbarui thumbnail
+```
+
+Perintah tanpa opsi juga menjalankan dry-run. Opsi `--arrange` memakai layout tiga kolom yang sama dengan tombol **Rapikan** di canvas, hanya untuk sesi yang terkena duplikat; perubahan posisi ikut disimpan. Opsi `--thumbnails` membuat ulang thumbnail sesi yang terdampak setelah perubahan selesai. Kedua langkah migrasi mempertahankan `updatedAt` sehingga tanggal edited tidak berubah; versi thumbnail diperbarui terpisah agar browser tetap memuat gambar terbaru. Mode `--apply` menyimpan backup sebelum mengubah data. Laporan deduplikasi dan penataan posisi tersimpan terpisah di `DATA_DIR/migrations/`. Migrasi ini satu kali; setelah itu server mencegah pembuatan frame kedua untuk path HTML yang sama.
+
 ### Struktur project
 
 ```text
@@ -314,7 +329,8 @@ Secara default aplikasi berjalan di `http://localhost:3000`.
 │   └── workspace/              # Session, file tools, export, zip, sandbox path
 ├── test/                       # Test suite Node.js bawaan
 ├── scripts/
-│   └── seed-admin.js           # Bootstrap/reset akun admin
+│   ├── seed-admin.js           # Bootstrap/reset akun admin
+│   └── migrate-duplicate-frames.js # Audit dan perbaiki frame duplikat
 ├── data/                       # Data runtime lokal (terbentuk otomatis, tidak masuk git)
 ├── package.json
 └── README.md

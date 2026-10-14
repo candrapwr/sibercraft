@@ -112,7 +112,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
     onCreateFrame: onCreateFrame ? async ({ file, device }) => {
       framedFiles.add(file); // AI registered it explicitly; don't auto-create later.
       const frame = await onCreateFrame({ file, device });
-      emit({ type: "frame_created", frame });
+      if (!frame.reused) emit({ type: "frame_created", frame });
       return frame;
     } : undefined,
     onDeleteFrame: async ({ frameId, file }) => {
