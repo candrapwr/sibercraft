@@ -480,7 +480,7 @@ async function handleApi(request, response, url, user) {
     if (Array.isArray(session.frames) && session.frames.length > 0) {
       return sendJson(response, 200, { frames: session.frames });
     }
-    await store.addFrame(id, { file: "index.html", device: "desktop" });
+    await store.addFrame(id, { file: "index.html", device: "desktop" }, { preserveUpdatedAt: true });
     const updated = await store.get(id);
     return sendJson(response, 200, { frames: updated.frames });
   }

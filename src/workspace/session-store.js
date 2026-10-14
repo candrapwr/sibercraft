@@ -414,7 +414,7 @@ export class SessionStore {
    * Tambah frame baru ke sesi. Frame = preview iframe yang pin ke satu file HTML di workspace.
    * Posisi (x,y) di-auto-assign; client bisa drag & memperbarui via updateFrame.
    */
-  async addFrame(id, { file, device = "desktop" }) {
+  async addFrame(id, { file, device = "desktop" }, { preserveUpdatedAt = false } = {}) {
     const current = await this.get(id);
     const frames = Array.isArray(current.frames) ? [...current.frames] : [];
     const normalizedFile = normalizeFrameFile(file);
@@ -430,7 +430,7 @@ export class SessionStore {
       createdAt: new Date().toISOString(),
     };
     frames.push(frame);
-    await this.update(id, { frames });
+    await this.update(id, { frames }, { preserveUpdatedAt });
     return frame;
   }
 
@@ -440,8 +440,10 @@ export class SessionStore {
     const frames = Array.isArray(current.frames) ? current.frames : [];
     const idx = frames.findIndex((f) => f.id === frameId);
     if (idx < 0) throw new HttpError(404, "Frame tidak ditemukan");
-    const next = { ...frames[idx], ...patch };
+    const currentFrame = frames[idx];
+    const next = { ...currentFrame, ...patch };
     if (next.device && !DEVICE_SIZES.has(next.device)) next.device = "desktop";
+    if (Object.keys(next).every((key) => next[key] === currentFrame[key])) return currentFrame;
     frames[idx] = next;
     await this.update(id, { frames });
     return next;

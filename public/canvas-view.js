@@ -97,8 +97,9 @@ async function enter({ session: s, chatMount, chatResizeHandle: handle }) {
   // Initialize canvas engine + load existing frames.
   canvas.reset(s.id);
   const list = Array.isArray(s.frames) ? s.frames : [];
-  // Some legacy/unsaved frames may still have x=0,y=0 (never dragged) and would
-  // stack on top of each other. Re-assign a layout slot to any unplaced frame.
+  // Frames with x=0,y=0 may be legacy/unplaced. Spread them in the displayed
+  // canvas, but keep this open-time layout client-side so merely opening a
+  // project never writes session data or changes its edited date.
   for (const f of list) {
     const unplaced = !f.x && !f.y;
     if (unplaced) {
@@ -117,15 +118,6 @@ async function enter({ session: s, chatMount, chatResizeHandle: handle }) {
   }
   updateEmptyHint();
   syncUndoState(s.checkpointCount);
-
-  // Persist newly-assigned layout positions for previously-unplaced frames
-  // so the next reload keeps them in place (best-effort; ignored for read-only).
-  for (const f of list) {
-    if (!f.x && !f.y) {
-      const placed = canvas.getFrames().find((x) => x.id === f.id);
-      if (placed) persistFrame({ action: "update", id: f.id, x: placed.x, y: placed.y, device: placed.device });
-    }
-  }
 
   dockOpen = true;
   layoutEl.classList.remove("dock-collapsed");
