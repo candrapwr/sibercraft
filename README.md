@@ -302,6 +302,17 @@ npm run migrate:duplicate-frames -- --apply --arrange --thumbnails     # dedupli
 
 Perintah tanpa opsi juga menjalankan dry-run. Opsi `--arrange` memakai layout tiga kolom yang sama dengan tombol **Rapikan** di canvas, hanya untuk sesi yang terkena duplikat; perubahan posisi ikut disimpan. Opsi `--thumbnails` membuat ulang thumbnail sesi yang terdampak setelah perubahan selesai. Kedua langkah migrasi mempertahankan `updatedAt` sehingga tanggal edited tidak berubah; versi thumbnail diperbarui terpisah agar browser tetap memuat gambar terbaru. Mode `--apply` menyimpan backup sebelum mengubah data. Laporan deduplikasi dan penataan posisi tersimpan terpisah di `DATA_DIR/migrations/`. Migrasi ini satu kali; setelah itu server mencegah pembuatan frame kedua untuk path HTML yang sama.
 
+### Bersihkan project kosong
+
+Script ini mencari project tanpa frame dan tanpa file di `workspace/`. File tersembunyi dan symlink dihitung sebagai konten, dan project berstatus `working` dilewati. Jalankan dengan `.env`/`DATA_DIR` yang sama dengan server produksi dan aktifkan maintenance mode selama apply.
+
+```bash
+npm run cleanup:empty-projects -- --dry-run  # daftar kandidat saja; default juga dry-run
+npm run cleanup:empty-projects -- --apply     # keluarkan kandidat dari daftar project
+```
+
+Mode `--apply` memindahkan seluruh folder sesi ke `DATA_DIR/migrations/quarantine/empty-projects/<run-id>/`, bukan menghapus permanen. Isi project, history, checkpoint, dan thumbnail tetap tersimpan agar bisa dipulihkan. Laporan setiap proses tersimpan di `DATA_DIR/migrations/cleanup-empty-projects/`.
+
 ### Struktur project
 
 ```text

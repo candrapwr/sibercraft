@@ -9,6 +9,7 @@
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "test": "node --disable-warning=ExperimentalWarning --test",
     "migrate:duplicate-frames": "node --disable-warning=ExperimentalWarning scripts/migrate-duplicate-frames.js",
+    "cleanup:empty-projects": "node --disable-warning=ExperimentalWarning scripts/cleanup-empty-projects.js",
     "seed:admin": "node --disable-warning=ExperimentalWarning scripts/seed-admin.js"
   },
   "engines": {
