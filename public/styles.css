@@ -608,6 +608,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .admin-provider-desc { margin: 14px 0 18px; color: #8fa197; font-size: 13px; line-height: 1.6; max-width: 620px; }
 .admin-provider-form { max-width: 620px; }
 .admin-provider-actions { margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(208,220,212,.1); }
+.admin-backup-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; max-width: 980px; }
+.admin-backup-card { display: flex; gap: 16px; padding: 22px; border: 1px solid rgba(208,220,212,.12); border-radius: 14px; background: rgba(255,255,255,.025); }
+.admin-backup-icon { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; background: rgba(122,208,159,.12); color: #7ad09f; font-size: 24px; font-weight: 700; }
+.admin-backup-card h3 { margin: 0 0 8px; color: #f4fbf6; font-size: 16px; }
+.admin-backup-card p { margin: 0 0 18px; color: #8fa197; font-size: 13px; line-height: 1.6; }
+.admin-backup-restore .admin-backup-icon { background: rgba(232,168,72,.12); color: #e8a848; }
+.admin-file-button { display: inline-flex; margin-right: 8px; }
+.admin-backup-file-name { display: inline-block; max-width: 240px; overflow: hidden; color: #8fa197; font-size: 12px; text-overflow: ellipsis; vertical-align: middle; white-space: nowrap; }
+.admin-backup-restore .button-danger { display: block; margin-top: 16px; }
+.admin-backup-warning { max-width: 980px; margin-top: 18px; padding: 14px 16px; border: 1px solid rgba(232,168,72,.22); border-radius: 10px; background: rgba(232,168,72,.07); color: #d8c18e; font-size: 12.5px; line-height: 1.6; }
+.admin-backup-warning code { color: #f0d28e; }
+#adminBackupNotice { max-width: 980px; margin-top: 16px; }
 .admin-content-actions { display: flex; align-items: center; gap: 14px; }
 .danger-ghost { color: #e0a09a; }
 .danger-ghost:hover { background: rgba(220,102,92,.14); color: #f0b4ad; }
@@ -650,5 +662,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .admin-view { grid-template-columns: 1fr; }
   .admin-sidebar { display: none; }
   .admin-content { padding: 22px 16px; }
+  .admin-backup-grid { grid-template-columns: 1fr; }
+  .admin-backup-card { padding: 16px; }
   .admin-table th:nth-child(6), .admin-table td:nth-child(6) { display: none; }
 }

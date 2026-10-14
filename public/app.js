@@ -763,16 +763,17 @@ function formatAdminDate(iso) {
   return d.toLocaleDateString(state.language === "id" ? "id-ID" : "en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-// Switch between admin panels (Users / Error logs). Toggles nav active state,
+// Switch between admin panels (Users / Error logs / Backup). Toggles nav active state,
 // shows/hides the corresponding panel, and loads its data.
 function switchAdminTab(name) {
-  if (name !== "users" && name !== "errors" && name !== "provider") return;
+  if (name !== "users" && name !== "errors" && name !== "provider" && name !== "backup") return;
   $$("[data-admin-nav]").forEach((button) => {
     button.classList.toggle("active", button.dataset.adminNav === name);
   });
   ui.adminUsersPanel.hidden = name !== "users";
   ui.adminErrorsPanel.hidden = name !== "errors";
   ui.adminProviderPanel.hidden = name !== "provider";
+  ui.adminBackupPanel.hidden = name !== "backup";
   if (name === "errors" && adminErrorState.logs.length === 0) loadAdminErrors();
   if (name === "users") loadAdminUsers();
   if (name === "provider") loadAdminProvider();
@@ -849,6 +850,66 @@ async function saveGlobalProvider(event) {
   } finally {
     setAuthLoading(submit, false);
   }
+}
+
+async function downloadAdminBackup() {
+  const button = ui.adminBackupDownload;
+  if (!button) return;
+  setAuthLoading(button, true, "Preparing backup");
+  showAdminBackupNotice(null);
+  try {
+    const response = await fetch("/api/admin/backup");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Backup failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `sibercraft-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+    downloadBlob(blob, filename);
+    showAdminBackupNotice("Backup downloaded successfully.", "success");
+  } catch (error) {
+    showAdminBackupNotice(error.message, "error");
+  } finally {
+    setAuthLoading(button, false);
+  }
+}
+
+function handleAdminBackupFile(event) {
+  const file = event.target.files?.[0] || null;
+  ui.adminBackupRestore.disabled = !file;
+  ui.adminBackupFileName.textContent = file ? `${file.name} (${formatBytes(file.size)})` : "No file selected";
+}
+
+async function restoreAdminBackup() {
+  const file = ui.adminBackupFile.files?.[0];
+  if (!file) return;
+  const confirmed = confirm("Restore akan mengganti seluruh user, project, database, dan file saat ini. Lanjutkan?");
+  if (!confirmed) return;
+  const button = ui.adminBackupRestore;
+  button.disabled = true;
+  setAuthLoading(button, true, "Restoring");
+  showAdminBackupNotice(null);
+  try {
+    const response = await fetch("/api/admin/restore", { method: "POST", headers: { "Content-Type": "application/zip" }, body: await file.arrayBuffer() });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Restore failed (${response.status})`);
+    showAdminBackupNotice("Restore completed. Reloading application…", "success");
+    setTimeout(() => window.location.reload(), 900);
+  } catch (error) {
+    showAdminBackupNotice(error.message, "error");
+    button.disabled = false;
+  } finally {
+    setAuthLoading(button, false);
+  }
+}
+
+function showAdminBackupNotice(message, kind = "success") {
+  if (!ui.adminBackupNotice) return;
+  if (!message) { ui.adminBackupNotice.hidden = true; ui.adminBackupNotice.textContent = ""; return; }
+  ui.adminBackupNotice.hidden = false;
+  ui.adminBackupNotice.textContent = message;
+  ui.adminBackupNotice.className = `api-settings-notice ${kind === "error" ? "error" : "success"}`;
 }
 
 function showGlobalProviderNotice(message, kind = "success") {
@@ -1186,6 +1247,9 @@ function bindEvents() {
     button.addEventListener("click", () => switchAdminTab(button.dataset.adminNav));
   });
   ui.globalProviderForm?.addEventListener("submit", saveGlobalProvider);
+  ui.adminBackupDownload?.addEventListener("click", downloadAdminBackup);
+  ui.adminBackupFile?.addEventListener("change", handleAdminBackupFile);
+  ui.adminBackupRestore?.addEventListener("click", restoreAdminBackup);
   // Error log filters + pagination + actions.
   ui.adminErrorFilterType?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });
   ui.adminErrorFilterSince?.addEventListener("change", () => { adminErrorState.offset = 0; loadAdminErrors(); });

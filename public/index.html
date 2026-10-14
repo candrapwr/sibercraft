@@ -87,6 +87,7 @@
         <button class="admin-nav-item active" type="button" data-admin-nav="users">◈ Users</button>
         <button class="admin-nav-item" type="button" data-admin-nav="provider">⚙ Global provider</button>
         <button class="admin-nav-item" type="button" data-admin-nav="errors">⚠ Error logs</button>
+        <button class="admin-nav-item" type="button" data-admin-nav="backup">↥ Backup & Restore</button>
       </nav>
       <button id="adminBackButton" class="admin-nav-item" type="button">← Back to app</button>
     </aside>
@@ -164,6 +165,36 @@
             <button type="submit" class="button button-dark">Save global provider <span>→</span></button>
           </div>
         </form>
+      </div>
+
+      <!-- Backup / restore panel -->
+      <div id="adminBackupPanel" class="admin-panel" hidden>
+        <header class="admin-content-header">
+          <div><p class="kicker">DATA SAFETY</p><h2>Backup & Restore</h2></div>
+        </header>
+        <div class="admin-backup-grid">
+          <section class="admin-backup-card">
+            <div class="admin-backup-icon">↓</div>
+            <div>
+              <h3>Download complete backup</h3>
+              <p>Includes users, projects, workspaces, history, uploads, checkpoints, thumbnails, database, and encrypted provider settings.</p>
+              <button id="adminBackupDownload" class="button button-dark" type="button">Create & download backup <span>↓</span></button>
+            </div>
+          </section>
+          <section class="admin-backup-card admin-backup-restore">
+            <div class="admin-backup-icon">↑</div>
+            <div>
+              <h3>Restore from backup</h3>
+              <p>Restore replaces the current application data with the selected snapshot. The server validates checksums before changing anything.</p>
+              <label class="button button-ghost admin-file-button" for="adminBackupFile">Choose ZIP backup</label>
+              <input id="adminBackupFile" type="file" accept=".zip,application/zip" hidden>
+              <span id="adminBackupFileName" class="admin-backup-file-name">No file selected</span>
+              <button id="adminBackupRestore" class="button button-danger" type="button" disabled>Restore selected backup</button>
+            </div>
+          </section>
+        </div>
+        <div class="admin-backup-warning" role="note"><strong>Important:</strong> restore changes all current users and projects. Use the same <code>SESSION_SECRET</code> as the server that created the backup, otherwise encrypted provider keys cannot be restored.</div>
+        <div id="adminBackupNotice" class="api-settings-notice" role="status" hidden></div>
       </div>
 
       <!-- Error logs panel -->

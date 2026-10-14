@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { config } from "./config/config.js";
 import { isConversationalPrompt, runAgent } from "./ai/agent.js";
 import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./workspace/exporter.js";
 import { HttpError, SessionStore } from "./workspace/session-store.js";
+import { createBackupArchive, stageBackupArchive, replaceDataDirectory } from "./workspace/backup.js";
 import { resolveWithin } from "./workspace/path-sandbox.js";
 import { captureFullPage } from "./media/screenshot.js";
 import { generateThumbnail, buildLayoutHtml } from "./media/thumbnail.js";
@@ -39,20 +40,21 @@ import { classifyError } from "./observability/classify-error.js";
 
 const publicDir = resolve("public");
 const store = new SessionStore(config.dataDir);
-const db = await initDb(config.dataDir);
-const userStore = new UserStore(db);
+let db = await initDb(config.dataDir);
+let userStore = new UserStore(db);
 // AES-GCM key for encrypting user-supplied API keys at rest. Derived from the
 // same SESSION_SECRET that signs session cookies, so its persistence caveats
 // are identical: if SESSION_SECRET is unset (ephemeral dev secret), stored API
 // keys become undecryptable after a restart (treated gracefully as "missing").
 const cryptoKey = await deriveKey(config.auth.secret);
-const providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
-const errorLogStore = new ErrorLogStore(db);
+let providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
+let errorLogStore = new ErrorLogStore(db);
 if (!process.env.SESSION_SECRET?.trim()) {
   console.warn("SESSION_SECRET belum diatur: API key pengguna tidak akan survive restart server.");
 }
 const activeRuns = new Map();
 const previewDrafts = new Map();
+let backupOperation = null;
 const MAX_IMAGE_BYTES = 1_000_000;
 const MAX_TOTAL_IMAGE_BYTES = MAX_IMAGE_BYTES * 4;
 await store.init();
@@ -204,6 +206,71 @@ async function handleApi(request, response, url, user) {
       return sendJson(response, 200, { ok: true });
     }
     throw new HttpError(405, "Method tidak diizinkan");
+  }
+
+  // --- Application backup / restore (admin only) ---
+  if (url.pathname === "/api/admin/backup" && method === "GET") {
+    requireAdmin(user);
+    if (backupOperation) throw new HttpError(409, "Operasi backup/restore lain sedang berjalan");
+    if (activeRuns.size > 0) throw new HttpError(409, "Hentikan semua proses AI sebelum membuat backup");
+    backupOperation = "backup";
+    let archive;
+    try {
+      archive = await createBackupArchive({ dataDir: config.dataDir, db, sessionSecret: config.auth.secret });
+    } finally {
+      backupOperation = null;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    response.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Length": archive.buffer.length,
+      "Content-Disposition": `attachment; filename="sibercraft-backup-${stamp}.zip"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(archive.buffer);
+    return;
+  }
+  if (url.pathname === "/api/admin/restore" && method === "POST") {
+    requireAdmin(user);
+    if (backupOperation) throw new HttpError(409, "Operasi backup/restore lain sedang berjalan");
+    if (activeRuns.size > 0) throw new HttpError(409, "Hentikan semua proses AI sebelum restore");
+    const contentType = String(request.headers["content-type"] || "").split(";", 1)[0].trim().toLowerCase();
+    if (contentType !== "application/zip" && contentType !== "application/x-zip-compressed") {
+      throw new HttpError(415, "Restore harus berupa file ZIP");
+    }
+    backupOperation = "restore";
+    let staged;
+    let dbClosed = false;
+    try {
+      const archive = await readRawBody(request, 2 * 1024 * 1024 * 1024);
+      staged = await stageBackupArchive({ archive, dataDir: config.dataDir, sessionSecret: config.auth.secret });
+      db.close();
+      dbClosed = true;
+      await replaceDataDirectory({ dataDir: config.dataDir, stage: staged.stage });
+      db = await initDb(config.dataDir);
+      userStore = new UserStore(db);
+      providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
+      errorLogStore = new ErrorLogStore(db);
+      previewDrafts.clear();
+      return sendJson(response, 200, { ok: true, createdAt: staged.manifest.createdAt, fileCount: staged.manifest.files.length });
+    } catch (error) {
+      if (staged?.stage) await rm(staged.stage, { recursive: true, force: true }).catch(() => {});
+      // Validation errors happen before closing the live DB; keep the current
+      // connection. Swap errors reopen whichever database is live.
+      if (dbClosed) {
+        try {
+          db = await initDb(config.dataDir);
+          userStore = new UserStore(db);
+          providerStore = new ProviderStore(db, cryptoKey, config.auth.secret);
+          errorLogStore = new ErrorLogStore(db);
+        } catch {}
+      }
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(dbClosed ? 500 : 400, `Restore gagal: ${error.message}`);
+    } finally {
+      backupOperation = null;
+    }
   }
 
   // --- Session routes: login ATAU anon (resolve owner dari cookie user/anon) ---
@@ -1046,12 +1113,20 @@ function publicToolResult(name, result) {
  * in isolation.
  */
 
-async function readJson(request, limit = 1_000_000) {
-  let body = "";
+async function readRawBody(request, limit = 1_000_000) {
+  const chunks = [];
+  let total = 0;
   for await (const chunk of request) {
-    body += chunk;
-    if (body.length > limit) throw new HttpError(413, "Request terlalu besar");
+    const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += value.length;
+    if (total > limit) throw new HttpError(413, "Request terlalu besar");
+    chunks.push(value);
   }
+  return Buffer.concat(chunks, total);
+}
+
+async function readJson(request, limit = 1_000_000) {
+  const body = (await readRawBody(request, limit)).toString("utf8");
   try {
     return body ? JSON.parse(body) : {};
   } catch {
