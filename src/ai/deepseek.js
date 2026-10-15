@@ -59,7 +59,7 @@ export class DeepSeekClient {
       const delta = choice.delta || {};
       if (typeof delta.content === "string" && delta.content) {
         content += delta.content;
-        onContent(delta.content);
+        onContent?.(delta.content);
       }
       for (const call of delta.tool_calls || []) {
         const current = toolCalls.get(call.index) || { id: "", type: "function", function: { name: "", arguments: "" } };

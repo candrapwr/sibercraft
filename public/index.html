@@ -493,6 +493,21 @@
           <button id="chatJumpLatest" class="chat-jump-latest" type="button" hidden><span aria-hidden="true">↓</span> <span data-builder-text="latestMessage">Latest message</span></button>
         </div>
         <div class="prompt-area">
+          <div id="contextMeter" class="context-meter" hidden>
+            <span id="contextUsageLabel" class="context-usage-label">Context 0 / 200k</span>
+            <strong id="contextUsagePercent" class="context-usage-percent">0%</strong>
+            <div
+              id="contextProgress"
+              class="context-meter-track"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              aria-label="Context usage"
+            ><span id="contextProgressFill"></span></div>
+            <span id="contextThresholdLabel" class="context-threshold-label"></span>
+            <span id="contextStatus" class="context-status" role="status" aria-live="polite"></span>
+          </div>
           <div id="builderActivity" class="builder-activity" role="status" aria-live="polite" hidden>
             <span class="activity-orbit" aria-hidden="true"></span><span id="builderActivityLabel"></span><time id="builderActivityTime" aria-hidden="true">0:00</time>
           </div>
@@ -500,10 +515,10 @@
             <div id="imageTray" class="image-tray" hidden></div>
             <textarea id="promptInput" rows="1" maxlength="20000" placeholder="Describe the mockup or use reference images..."></textarea>
             <div class="prompt-footer">
-              <button id="imageButton" class="image-button" type="button" title="Add images" aria-label="Add images">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="m5.5 17 4.2-4 3.1 2.8 2.3-2.1 3.4 3.3"></path></svg>
+              <button id="imageButton" class="image-button" type="button" title="Upload files" aria-label="Upload files">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 12.5 6.1-6.1a3.5 3.5 0 0 1 5 5l-8.8 8.8a5.5 5.5 0 0 1-7.8-7.8l8.8-8.8"></path><path d="m7 14 8.5-8.5"></path></svg>
               </button>
-              <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+              <input id="imageInput" type="file" accept="*/*" multiple hidden>
               <span><kbd>Enter</kbd> send</span>
               <button id="sendButton" class="send-button" type="submit" aria-label="Send prompt">↑</button>
               <button id="stopButton" class="stop-button" type="button" hidden>■ Stop</button>

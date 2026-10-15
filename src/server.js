@@ -109,6 +109,13 @@ async function handleApi(request, response, url, user) {
       aiConfigured: Boolean(config.deepseek.apiKey),
       model: config.deepseek.model,
       multimodalConfigured: Boolean(config.deepseek.multimodal.apiKey && config.deepseek.multimodal.model),
+      contextOptimize: {
+        enabled: config.deepseek.contextOptimize.enabled,
+        mode: config.deepseek.contextOptimize.mode,
+        contextWindow: config.deepseek.contextOptimize.contextWindow,
+        compactThreshold: config.deepseek.contextOptimize.compactThreshold,
+        compactKeepRecent: config.deepseek.contextOptimize.compactKeepRecent,
+      },
     });
   }
 
@@ -315,6 +322,18 @@ async function handleApi(request, response, url, user) {
   const [, id, action = ""] = match;
   // Kepemilikan divalidasi di store.get (admin lihat semua).
   const access = { ownerId: owner.ownerId, isAdmin: isAdmin(user) };
+
+  if (method === "POST" && action === "upload") {
+    await store.getForEdit(id, access);
+    if (activeRuns.has(id)) throw new HttpError(409, "Hentikan proses AI sebelum mengunggah file");
+    const buffer = await readRawBody(request, config.workspaceUploadMaxBytes);
+    const uploaded = await store.saveUploadedFile(id, {
+      name: url.searchParams.get("name"),
+      type: request.headers["content-type"],
+      buffer,
+    });
+    return sendJson(response, 201, uploaded);
+  }
 
   if (method === "GET" && !action) {
     const session = await store.getForView(id, access);
@@ -756,19 +775,34 @@ async function streamChat(request, response, id, access) {
   if (activeRuns.has(id)) throw new HttpError(409, "AI masih bekerja pada sesi ini");
   const body = await readJson(request, 16_000_000);
   const imagePayloads = parseImagePayloads(body.images);
-  const prompt = String(body.prompt || "").trim() || (imagePayloads.length ? "Gunakan gambar ini sebagai referensi untuk membuat atau memperbarui mockup." : "");
+  const session = await store.getForEdit(id, access);
+  const uploadedFiles = await validateUploadedReferences(id, body.uploads);
+  const prompt = String(body.prompt || "").trim() || ((imagePayloads.length || uploadedFiles.length)
+    ? "Gunakan file terlampir sebagai referensi untuk membuat atau memperbarui mockup."
+    : "");
   if (!prompt) throw new HttpError(400, "Prompt atau gambar wajib diisi");
   if (prompt.length > 20_000) throw new HttpError(413, "Prompt terlalu panjang");
   if (imagePayloads.length && !(config.deepseek.multimodal.apiKey && config.deepseek.multimodal.model)) {
     throw new HttpError(400, "Model multimodal belum dikonfigurasi");
   }
-  const session = await store.getForEdit(id, access);
   const history = await store.history(id);
+  const attachmentsByPath = new Map(uploadedFiles.map((file) => [file.path, file]));
   const images = [];
   for (const image of imagePayloads) {
-    const attachment = await store.saveUploadedImage(id, image);
+    let attachment;
+    if (image.path) {
+      attachment = attachmentsByPath.get(image.path);
+      if (!attachment || !String(attachment.type).startsWith("image/")) {
+        throw new HttpError(400, "Path gambar yang diunggah tidak valid");
+      }
+    } else {
+      attachment = await store.saveUploadedImage(id, image);
+      attachmentsByPath.set(attachment.path, attachment);
+    }
     images.push({ ...attachment, dataUrl: image.dataUrl });
   }
+  const attachments = [...attachmentsByPath.values()];
+  if (attachments.length > 10) throw new HttpError(400, "Maksimal 10 file per turn");
   const checkpoint = isConversationalPrompt(prompt)
     ? null
     : await store.createCheckpoint(id, history.length);
@@ -803,6 +837,7 @@ async function streamChat(request, response, id, access) {
   });
 
   let result = null;
+  let partialUsage = null;
   // agentConfig must stay in scope for the catch handler (error logging).
   let agentConfig = config.deepseek;
   try {
@@ -813,6 +848,7 @@ async function streamChat(request, response, id, access) {
       store,
       prompt,
       images,
+      attachments,
       config: agentConfig,
       webScreenshot: config.webScreenshot,
       signal: controller.signal,
@@ -822,6 +858,31 @@ async function streamChat(request, response, id, access) {
     if (checkpoint && !result?.mutated) await store.discardCheckpoint(id, checkpoint);
   } catch (error) {
     const isAbort = error.name === "AbortError";
+    partialUsage = error._aiUsage || null;
+    if (partialUsage && (partialUsage.promptTokens > 0 || partialUsage.completionTokens > 0)) {
+      try {
+        const latestSession = await store.get(id);
+        const previousUsage = latestSession.usage || { last: {}, total: {} };
+        const usage = {
+          last: {
+            promptTokens: partialUsage.lastPromptTokens ?? previousUsage.last?.promptTokens ?? 0,
+            completionTokens: partialUsage.lastCompletionTokens ?? previousUsage.last?.completionTokens ?? 0,
+            contextSize: partialUsage.contextSize || previousUsage.last?.contextSize || 0,
+            contextSizeEstimated: partialUsage.contextSizeEstimated
+              ?? previousUsage.last?.contextSizeEstimated
+              ?? false,
+          },
+          total: {
+            promptTokens: (previousUsage.total?.promptTokens || 0) + (partialUsage.promptTokens || 0),
+            completionTokens: (previousUsage.total?.completionTokens || 0) + (partialUsage.completionTokens || 0),
+          },
+        };
+        await store.update(id, { usage });
+        emit({ type: "usage", usage });
+      } catch (usageError) {
+        console.warn(`Gagal menyimpan usage parsial sesi ${id}: ${usageError.message}`);
+      }
+    }
     const run = activeRuns.get(id);
     // intentional=true means the user clicked Stop; an abort without it is a
     // network disconnect, which is a real failure worth logging.
@@ -858,8 +919,9 @@ async function streamChat(request, response, id, access) {
     // Attribute token consumption to the user ONLY when their own private
     // provider key was used for this turn (operator-default usage is the
     // server's cost and intentionally not billed here).
-    if (result?.providerSource === "user" && result.promptTokens + result.completionTokens > 0) {
-      try { providerStore.incrementUsage(access.ownerId, result.promptTokens, result.completionTokens); } catch {}
+    const accountedUsage = result || partialUsage;
+    if (accountedUsage?.providerSource === "user" && accountedUsage.promptTokens + accountedUsage.completionTokens > 0) {
+      try { providerStore.incrementUsage(access.ownerId, accountedUsage.promptTokens, accountedUsage.completionTokens); } catch {}
     }
     // Bila AI mengubah/membuat file, regenerate thumbnail di background.
     // Fire-and-forget (best-effort): skip diam-diam bila Chrome tidak ada.
@@ -1052,11 +1114,17 @@ function toPublicMessage(message, sessionId) {
   if (message.role === "user") return {
     role: "user",
     content: message.content,
-    attachments: (message.attachments || []).map((attachment) => ({
-      name: attachment.name,
-      type: attachment.type,
-      url: `/preview/${sessionId}/${attachment.path.split("/").map(encodeURIComponent).join("/")}`,
-    })),
+    attachments: (message.attachments || []).map((attachment) => {
+      const type = attachment.type || "application/octet-stream";
+      return {
+        name: attachment.name,
+        type,
+        path: attachment.path,
+        ...(String(type).startsWith("image/") && attachment.path
+          ? { url: `/preview/${sessionId}/${attachment.path.split("/").map(encodeURIComponent).join("/")}` }
+          : {}),
+      };
+    }),
   };
   if (message.role === "assistant") {
     const calls = (message.tool_calls || []).map((call) => ({
@@ -1097,8 +1165,47 @@ function parseImagePayloads(value) {
     if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) throw new HttpError(413, "Ukuran setiap gambar maksimal 1 MB");
     totalSize += buffer.length;
     if (totalSize > MAX_TOTAL_IMAGE_BYTES) throw new HttpError(413, "Total gambar maksimal 4 MB per turn");
-    return { name, type: match[1].toLowerCase(), dataUrl, buffer };
+    return {
+      name,
+      type: match[1].toLowerCase(),
+      dataUrl,
+      buffer,
+      path: typeof item?.path === "string" ? item.path : null,
+    };
   });
+}
+
+async function validateUploadedReferences(id, value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new HttpError(400, "Daftar file lampiran tidak valid");
+  if (value.length > 10) throw new HttpError(400, "Maksimal 10 file per turn");
+
+  const files = new Map();
+  for (const item of value) {
+    const path = normalizeDraftPath(item?.path);
+    if (!path || !path.startsWith("uploads/")) {
+      throw new HttpError(400, "Path file lampiran tidak valid");
+    }
+    const fullPath = await resolveWithin(store.workspaceDir(id), path);
+    let info;
+    try {
+      info = await stat(fullPath);
+    } catch {
+      throw new HttpError(400, `File lampiran tidak ditemukan: ${path}`);
+    }
+    if (!info.isFile()) throw new HttpError(400, `Lampiran bukan file: ${path}`);
+    const suppliedType = String(item?.type || "application/octet-stream").split(";")[0].trim();
+    const type = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(suppliedType)
+      ? suppliedType.slice(0, 120)
+      : "application/octet-stream";
+    files.set(path, {
+      name: String(item?.name || path.split("/").pop()).slice(0, 180),
+      type,
+      path,
+      size: info.size,
+    });
+  }
+  return [...files.values()];
 }
 
 function publicToolResult(name, result) {

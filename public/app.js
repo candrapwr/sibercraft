@@ -10,6 +10,7 @@ let followLatestMessage = true;
 let activityTimer = null;
 let activityStartedAt = 0;
 let stopRequested = false;
+let contextStatusTimer = null;
 
 boot();
 
@@ -57,6 +58,7 @@ function applyLanguage() {
     button.classList.toggle("active", button.dataset.languageOption === state.language);
   });
   applyStaticText();
+  renderContextMeter();
 }
 
 function applyStaticText() {
@@ -118,9 +120,9 @@ function applyStaticText() {
   $("#deleteButton").setAttribute("aria-label", t("deleteAria"));
   ui.chatMessages.setAttribute("aria-label", t("chatHistory"));
   ui.promptInput.placeholder = t("promptPlaceholder");
-  $("#imageButton").title = t("addImages");
-  setTip($("#imageButton"), t("addImages"));
-  $("#imageButton").setAttribute("aria-label", t("addImages"));
+  $("#imageButton").title = t("addFiles");
+  setTip($("#imageButton"), t("addFiles"));
+  $("#imageButton").setAttribute("aria-label", t("addFiles"));
   $(".prompt-footer > span").innerHTML = `<kbd>Enter</kbd> ${t("enterSend")}`;
   $("#sendButton").setAttribute("aria-label", t("sendPrompt"));
   $("#panelResizeHandle").setAttribute("aria-label", t("resizeChatPanel"));
@@ -1280,10 +1282,9 @@ function bindEvents() {
   });
   ui.promptInput.addEventListener("input", autoResizePrompt);
   ui.imageButton.addEventListener("click", () => {
-    if (!state.config?.multimodalConfigured) return notify(t("multimodalUnavailable"), true);
     ui.imageInput.click();
   });
-  ui.imageInput.addEventListener("change", () => addPendingImages(ui.imageInput.files).catch((error) => notify(error.message, true)));
+  ui.imageInput.addEventListener("change", () => addPendingFiles(ui.imageInput.files).catch((error) => notify(error.message, true)));
   ui.chatMessages.addEventListener("click", (event) => {
     const starter = event.target.closest("[data-starter-prompt]");
     if (starter && !state.running && !state.readOnly) {
@@ -1291,7 +1292,7 @@ function bindEvents() {
       autoResizePrompt();
       ui.promptInput.focus();
     }
-    const image = event.target.closest(".message-images img");
+    const image = event.target.closest(".message-images img, .message-attachments img");
     if (image) openImageLightbox(image);
   });
   ui.chatMessages.addEventListener("scroll", () => {
@@ -1306,7 +1307,7 @@ function bindEvents() {
     scrollChat(true);
   });
   ui.chatMessages.addEventListener("keydown", (event) => {
-    const image = event.target.closest(".message-images img");
+    const image = event.target.closest(".message-images img, .message-attachments img");
     if (image && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
       openImageLightbox(image);
@@ -1389,7 +1390,9 @@ async function openSession(id) {
     api(`/api/sessions/${id}/history`),
   ]);
   state.session = session;
+  setContextStatus("");
   state.pendingImages = [];
+  state.pendingFiles = [];
   // Read-only bila user tidak login ATAU bukan pemilik (lihat project publik orang lain).
   const isOwner = session.ownerId && session.ownerId === state.ownerId;
   const isAdmin = state.user && state.user.role === "admin";
@@ -1456,6 +1459,8 @@ function applyReadOnlyMode() {
   for (const key of ["promptInput", "sendButton", "imageButton", "deleteButton", "filesButton", "exportButton"]) {
     if (ui[key]) ui[key].disabled = readonly;
   }
+  ui.imageButton.disabled = readonly || state.running || state.uploadingFiles > 0;
+  ui.sendButton.disabled = readonly || state.uploadingFiles > 0;
   // Banner read-only (dibuat di index.html).
   const banner = $("#readOnlyBanner");
   const bannerText = $("#readOnlyBannerText");
@@ -1492,18 +1497,64 @@ function renderUsage(usage) {
     b.badge.hidden = false;
     if (b.prompt) b.prompt.textContent = formatCompactTokens(usage.last.promptTokens || 0);
     if (b.completion) b.completion.textContent = formatCompactTokens(usage.last.completionTokens || 0);
-    b.badge.title = `Turn total - prompt: ${(usage.last.promptTokens || 0).toLocaleString()} - completion: ${(usage.last.completionTokens || 0).toLocaleString()}`;
+    b.badge.title = `Last request - prompt: ${(usage.last.promptTokens || 0).toLocaleString()} - completion: ${(usage.last.completionTokens || 0).toLocaleString()}`;
+  }
+  renderContextMeter();
+}
+
+function renderContextMeter() {
+  if (!ui.contextMeter) return;
+  if (!state.session) {
+    ui.contextMeter.hidden = true;
+    return;
+  }
+
+  const settings = state.config?.contextOptimize || {};
+  const contextWindow = Math.max(1, Number(settings.contextWindow) || 200_000);
+  const usage = state.session.usage?.last || {};
+  const used = Math.max(0, Number(usage.contextSize) || 0);
+  const hasMeasurement = used > 0;
+  ui.contextMeter.hidden = false;
+  const percent = (used / contextWindow) * 100;
+  const rounded = Math.round(percent);
+  if (ui.contextUsageLabel) {
+    ui.contextUsageLabel.textContent = t("contextUsage", {
+      used: hasMeasurement
+        ? `${usage.contextSizeEstimated ? "~" : ""}${formatCompactTokens(used)}`
+        : "—",
+      window: formatCompactTokens(contextWindow),
+    });
+  }
+  if (ui.contextUsagePercent) ui.contextUsagePercent.textContent = hasMeasurement ? `${rounded}%` : "—";
+  if (ui.contextProgress) {
+    ui.contextProgress.setAttribute("aria-valuenow", String(hasMeasurement ? Math.max(0, Math.min(100, rounded)) : 0));
+    ui.contextProgress.setAttribute("aria-label", t("contextUsageAria"));
+    ui.contextProgress.classList.toggle("warn", hasMeasurement && percent >= 60 && percent < 85);
+    ui.contextProgress.classList.toggle("crit", hasMeasurement && percent >= 85);
+  }
+  if (ui.contextProgressFill) {
+    ui.contextProgressFill.style.width = `${hasMeasurement ? Math.max(0, Math.min(100, percent)) : 0}%`;
+  }
+  if (ui.contextThresholdLabel) {
+    if (!settings.enabled) ui.contextThresholdLabel.textContent = t("contextOptimizeDisabled");
+    else if (settings.mode === "drop") ui.contextThresholdLabel.textContent = t("contextDropMode");
+    else ui.contextThresholdLabel.textContent = t("contextThreshold", {
+      threshold: Math.round((Number(settings.compactThreshold) || 0.8) * 100),
+    });
   }
 }
 
-function resetTurnUsageDisplay() {
-  if (!state.session) return;
-  const usage = state.session.usage || { total: { promptTokens: 0, completionTokens: 0 } };
-  state.session.usage = {
-    last: { promptTokens: 0, completionTokens: 0 },
-    total: usage.total || { promptTokens: 0, completionTokens: 0 },
-  };
-  renderUsage(state.session.usage);
+function setContextStatus(message, kind = "", clearAfter = 0) {
+  if (!ui.contextStatus) return;
+  clearTimeout(contextStatusTimer);
+  ui.contextStatus.textContent = message || "";
+  ui.contextStatus.className = kind;
+  if (message && clearAfter > 0) {
+    contextStatusTimer = setTimeout(() => {
+      ui.contextStatus.textContent = "";
+      ui.contextStatus.className = "";
+    }, clearAfter);
+  }
 }
 
 function renderSessions() {
@@ -1713,16 +1764,27 @@ function appendUserMessage(content = "", attachments = []) {
   body.className = "message-body";
   if (attachments.length) {
     const gallery = document.createElement("div");
-    gallery.className = "message-images";
+    gallery.className = "message-attachments";
     for (const attachment of attachments) {
-      const image = document.createElement("img");
-      image.src = attachment.url || attachment.dataUrl;
-      image.alt = attachment.name || t("referenceImage");
-      image.loading = "lazy";
-      image.tabIndex = 0;
-      image.setAttribute("role", "button");
-      image.setAttribute("aria-label", t("enlargeImage", { name: image.alt }));
-      gallery.append(image);
+      if (String(attachment.type || "").startsWith("image/") && (attachment.url || attachment.dataUrl)) {
+        const image = document.createElement("img");
+        image.src = attachment.url || attachment.dataUrl;
+        image.alt = attachment.name || t("referenceImage");
+        image.loading = "lazy";
+        image.tabIndex = 0;
+        image.setAttribute("role", "button");
+        image.setAttribute("aria-label", t("enlargeImage", { name: image.alt }));
+        gallery.append(image);
+      } else {
+        const file = document.createElement("div");
+        file.className = "message-file-attachment";
+        const name = document.createElement("strong");
+        name.textContent = attachment.name || "file";
+        const path = document.createElement("small");
+        path.textContent = attachment.path || "";
+        file.append(name, path);
+        gallery.append(file);
+      }
     }
     body.append(gallery);
   }
@@ -1757,36 +1819,90 @@ function closeImageLightbox() {
   lightboxTrigger = null;
 }
 
-async function addPendingImages(fileList) {
+async function uploadWorkspaceFile(file, sessionId) {
+  const response = await fetch(
+    `/api/sessions/${sessionId}/upload?name=${encodeURIComponent(file.name || "file")}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    },
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || t("uploadFailed", { name: file.name }));
+  return result;
+}
+
+async function addPendingFiles(fileList) {
   const files = [...(fileList || [])];
   ui.imageInput.value = "";
   if (!files.length) return;
-  const remaining = 4 - state.pendingImages.length;
-  if (remaining <= 0) return notify(t("maxImages"), true);
-  for (const file of files.slice(0, remaining)) {
-    if (!new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(file.type)) {
-      notify(t("unsupportedFormat", { name: file.name }), true);
-      continue;
+  const sessionId = state.session?.id;
+  if (!sessionId) return;
+  const remaining = 10 - state.pendingImages.length - state.pendingFiles.length;
+  if (remaining <= 0) return notify(t("maxFiles"), true);
+  state.uploadingFiles++;
+  ui.imageButton.disabled = true;
+  ui.sendButton.disabled = true;
+  try {
+    for (const file of files.slice(0, remaining)) {
+      try {
+        const isVisionImage = state.config?.multimodalConfigured
+          && state.pendingImages.length < 4
+          && file.size > 0
+          && file.size <= MAX_IMAGE_BYTES
+          && new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]).has(file.type);
+        const dataUrl = isVisionImage ? await readFileAsDataUrl(file) : null;
+        const uploaded = await uploadWorkspaceFile(file, sessionId);
+        if (state.session?.id !== sessionId) break;
+        const attachment = { ...uploaded, id: crypto.randomUUID() };
+        if (dataUrl) state.pendingImages.push({ ...attachment, dataUrl });
+        else state.pendingFiles.push(attachment);
+        renderImageTray();
+      } catch (error) {
+        notify(error.message || t("uploadFailed", { name: file.name }), true);
+      }
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      notify(t("imageTooLarge", { name: file.name }), true);
-      continue;
-    }
-    state.pendingImages.push({
-      id: crypto.randomUUID(),
-      name: file.name,
-      type: file.type,
-      dataUrl: await readFileAsDataUrl(file),
-    });
+    if (files.length > remaining) notify(t("maxFiles"), true);
+  } finally {
+    state.uploadingFiles--;
+    ui.imageButton.disabled = state.running || state.readOnly || state.uploadingFiles > 0;
+    ui.sendButton.disabled = state.uploadingFiles > 0;
   }
-  renderImageTray();
 }
 
 function renderImageTray() {
   if (!ui.imageTray) return;
   ui.imageTray.replaceChildren();
-  ui.imageTray.hidden = state.pendingImages.length === 0;
-  for (const pending of state.pendingImages) {
+  const pendingItems = [
+    ...state.pendingImages.map((file) => ({ ...file, image: true })),
+    ...state.pendingFiles.map((file) => ({ ...file, image: false })),
+  ];
+  ui.imageTray.hidden = pendingItems.length === 0;
+  for (const pending of pendingItems) {
+    if (!pending.image) {
+      const item = document.createElement("div");
+      item.className = "file-preview";
+      const details = document.createElement("div");
+      details.className = "file-preview-details";
+      const name = document.createElement("strong");
+      name.textContent = pending.name;
+      const path = document.createElement("small");
+      path.textContent = pending.path;
+      path.title = pending.path;
+      details.append(name, path);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.title = t("removeFile", { name: pending.name });
+      remove.addEventListener("click", () => {
+        state.pendingFiles = state.pendingFiles.filter((file) => file.id !== pending.id);
+        renderImageTray();
+      });
+      item.append(details, remove);
+      ui.imageTray.append(item);
+      continue;
+    }
     const item = document.createElement("div");
     item.className = "image-preview";
     const image = document.createElement("img");
@@ -1810,6 +1926,7 @@ function readFileAsDataUrl(file) {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error || new Error(t("imageReadFailed")));
+    reader.onabort = () => reject(new Error(t("imageReadFailed")));
     reader.readAsDataURL(file);
   });
 }
@@ -2076,9 +2193,12 @@ function appendTurnModels(turn, models) {
 async function sendPrompt(event) {
   event.preventDefault();
   if (state.running || !state.session) return;
+  if (state.uploadingFiles > 0) return notify(t("uploadingFiles"), true);
   const typedPrompt = ui.promptInput.value.trim();
-  const images = state.pendingImages.map(({ name, type, dataUrl }) => ({ name, type, dataUrl }));
-  const prompt = typedPrompt || (images.length ? t("imagePromptDefault") : "");
+  const attachedItems = [...state.pendingImages, ...state.pendingFiles];
+  const uploads = attachedItems.map(({ name, type, path }) => ({ name, type, path }));
+  const images = state.pendingImages.map(({ name, type, dataUrl, path }) => ({ name, type, dataUrl, path }));
+  const prompt = typedPrompt || (uploads.length ? t("filePromptDefault") : "");
   if (!prompt) return;
   if (!state.config?.aiConfigured) return notify(t("missingApiKey"), true);
   if (images.length && !state.config?.multimodalConfigured) return notify(t("multimodalUnavailable"), true);
@@ -2087,12 +2207,16 @@ async function sendPrompt(event) {
   stopRequested = false;
   followLatestMessage = true;
   setRunningUi(true);
-  appendUserMessage(prompt, state.pendingImages.map((image) => ({ ...image, url: image.dataUrl })));
+  appendUserMessage(prompt, attachedItems.map((item) => ({
+    ...item,
+    ...(item.dataUrl ? { url: item.dataUrl } : {}),
+  })));
   state.pendingImages = [];
+  state.pendingFiles = [];
   renderImageTray();
   ui.promptInput.value = "";
   autoResizePrompt();
-  resetTurnUsageDisplay();
+  setContextStatus("");
   let bufferedDelta = "";
   let streamRenderFrame = null;
   let sawAssistantOutput = false;
@@ -2110,7 +2234,9 @@ async function sendPrompt(event) {
 
   try {
     const response = await fetch(`/api/sessions/${state.session.id}/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, images }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, images, uploads }),
     });
     if (!response.ok) throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
     await readNdjson(response.body, (eventData) => {
@@ -2177,6 +2303,12 @@ async function sendPrompt(event) {
         finalizeAssistantTurn();
       } else if (eventData.type === "context_optimized") {
         notify(t("contextOptimized", { size: formatBytes(eventData.bytesSaved) }));
+      } else if (eventData.type === "context_compacting") {
+        setContextStatus(t("contextCompacting"), "busy");
+      } else if (eventData.type === "context_compacted") {
+        setContextStatus(t("contextCompacted", { count: eventData.turnsSummarized || 0 }), "", 5000);
+      } else if (eventData.type === "context_compaction_error") {
+        setContextStatus(t("contextCompactionError"), "error", 6000);
       } else if (eventData.type === "usage") {
         state.session.usage = eventData.usage;
         renderUsage(eventData.usage);
@@ -2221,6 +2353,7 @@ async function sendPrompt(event) {
     refreshPreview();
   } catch (error) {
     flushBufferedContent();
+    setContextStatus("");
     for (const tool of state.activeToolBlocks.values()) {
       finalizeToolBlock(tool, stopRequested ? t("generationStopped") : error.message, false, stopRequested ? "not_executed" : "failed");
     }
@@ -2257,11 +2390,12 @@ function setRunningUi(running) {
   }
   ui.promptInput.disabled = running;
   ui.sendButton.hidden = running;
+  ui.sendButton.disabled = state.uploadingFiles > 0;
   ui.stopButton.hidden = !running;
   ui.stopButton.disabled = false;
   ui.undoButton.disabled = running || !state.session?.checkpointCount;
   ui.exportButton.disabled = running;
-  ui.imageButton.disabled = running;
+  ui.imageButton.disabled = running || state.readOnly || state.uploadingFiles > 0;
 }
 
 function openExportDialog() {

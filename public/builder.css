@@ -76,6 +76,19 @@
 .message-copy svg { width: 13px; height: 13px; }
 .chat-jump-latest { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 7px; align-items: center; padding: 9px 14px; border: 1px solid #d9f0e4; border-radius: 30px; background: #fff; color: #5eae86; font-size: 11px; white-space: nowrap; box-shadow: 0 4px 20px #2c624712; cursor: pointer; }
 .prompt-area { padding: 10px 12px 8px; background: #fff; border-top: 1px solid #f0f6f3; }
+.context-meter { display: flex; align-items: center; gap: 7px; min-width: 0; margin: 0 3px 8px; padding: 0 2px; color: #829087; font-size: 8px; line-height: 1; }
+.context-meter[hidden] { display: none; }
+.context-usage-label, .context-threshold-label, .context-status { flex: 0 0 auto; white-space: nowrap; }
+.context-usage-label { color: #78877d; font-variant-numeric: tabular-nums; }
+.context-usage-percent { flex: 0 0 auto; color: #608c73; font-size: 8px; font-variant-numeric: tabular-nums; font-weight: 650; }
+.context-threshold-label { color: #9aa59c; }
+.context-meter-track { flex: 1 1 auto; min-width: 28px; height: 3px; overflow: hidden; border-radius: 99px; background: #edf3ef; }
+.context-meter-track > span { display: block; width: 0; height: 100%; border-radius: inherit; background: #72c697; transition: width .25s ease, background .2s ease; }
+.context-meter-track.warn > span { background: #d9a957; }
+.context-meter-track.crit > span { background: #d57467; }
+.context-status { color: #6e9a7e; }
+.context-status.busy::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 4px; border: 1px solid #b9e3cb; border-top-color: #55ad7d; border-radius: 50%; vertical-align: -1px; animation: spin 1s linear infinite; }
+.context-status.error { color: #b2776f; }
 .prompt-form { border: 1px solid #dde9e3; border-radius: 15px; background: #fcfefd; box-shadow: 0 3px 8px #203b2e03; transition: border-color .18s, box-shadow .18s; }
 .prompt-form:focus-within { border-color: #9de8c2; box-shadow: 0 0 0 3px #167a4b0b, 0 5px 15px #167a4b09; }
 .prompt-form textarea { min-height: 44px; max-height: 140px; padding: 10px 12px 4px; font-size: 12px; line-height: 1.55; color: #31453b; }
@@ -91,6 +104,10 @@
 .composer-hint { text-align: center; color: #adb0a6; font-size: 9px; margin: 6px 0 0; }
 .image-preview { width: 56px; height: 56px; }
 .image-preview img { border-color: #d9ece2; border-radius: 9px; }
+.file-preview { width: 160px; min-width: 160px; border-color: #d9ece2; border-radius: 9px; background: #f7fcf9; }
+.file-preview-details strong, .message-file-attachment strong { color: #31453b; }
+.file-preview-details small, .message-file-attachment small { color: #82968b; }
+.message-file-attachment { border-color: #d9ece2; border-radius: 8px; background: #f7fcf9; }
 .builder-activity { display: flex; align-items: center; gap: 9px; margin: 0 3px 13px; min-height: 18px; font-size: 10px; color: #7daf96; }
 #builderActivityLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #builderActivityTime { color: #abaea3; font-variant-numeric: tabular-nums; }

@@ -144,11 +144,11 @@ Saat AI bekerja:
 - Preview terisi bertahap (streaming) sampai selesai, lalu canvas kembali ke tampilan semua frame.
 - Panel chat menampilkan setiap langkah AI (tool calls) beserta status proses.
 
-### 4. Tambahkan gambar referensi (opsional)
+### 4. Unggah file referensi (opsional)
 
-Tekan ikon gambar di area chat untuk menambahkan screenshot, wireframe, foto, atau referensi visual. SiberCraft otomatis menggunakan AI multimodal pada permintaan yang berisi gambar.
+Tekan ikon lampiran di area chat untuk mengunggah file ke folder `uploads/` di workspace project. Path file akan ditampilkan di chat dan dikirim ke AI sebagai referensi. File teks dapat diperiksa AI lewat tool `read_file`; gambar PNG, JPEG, WebP, dan GIF hingga 1 MB juga dikirim ke model multimodal bila sudah dikonfigurasi.
 
-Format yang didukung: PNG, JPEG, WebP, dan GIF (maksimal 4 gambar, 1 MB per gambar, 4 MB total per permintaan).
+Semua format file dapat disimpan, dengan batas default 50 MiB per file (dapat diubah lewat `WORKSPACE_UPLOAD_MAX_BYTES`, maksimum 250 MiB). Maksimal 10 file dapat dilampirkan dalam satu turn. File biner selain gambar tetap tersedia di workspace beserta path-nya, tetapi belum diekstrak menjadi teks oleh AI.
 
 ### 5. Lanjutkan dengan revisi
 
@@ -382,6 +382,21 @@ MAIL_FROM_NAME="Craft idSiber"
 ```
 
 Konfigurasi lainnya (model AI, reasoning effort, screenshot API, optimasi konteks) dijelaskan di `.env.example`.
+
+### Optimasi history percakapan
+
+History asli tetap tersimpan. Saat penggunaan prompt terakhir mencapai ambang context, AI merangkum turn lama secara bertahap sebelum permintaan chat berikutnya dan mempertahankan turn terbaru dalam bentuk penuh. Panggilan AI untuk merangkum memakai model aktif dan tokennya masuk ke usage session. Di bawah chat, meter menampilkan pemakaian context dan ambang ringkas otomatis.
+
+| Variable | Default | Keterangan |
+|---|---:|---|
+| `CONTEXT_OPTIMIZE` | `true` | Aktif/nonaktifkan optimasi history |
+| `CONTEXT_OPTIMIZE_MODE` | `summary` | `summary` memakai ringkasan AI; `drop` memakai pemangkasan jejak tool |
+| `CONTEXT_WINDOW` | `200000` | Perkiraan batas context model aktif, dalam token |
+| `CONTEXT_OPTIMIZE_THRESHOLD` | `0.8` | Ambang compact sebagai rasio context window (`0.8` = 80%) |
+| `CONTEXT_OPTIMIZE_KEEP_RECENT` | `2` | Jumlah turn terbaru yang dipertahankan utuh |
+| `CONTEXT_SUMMARY_MAX_TOKENS` | `1200` | Batas token keluaran untuk satu ringkasan AI |
+| `CONTEXT_SUMMARY_MAX_INPUT_CHARS` | `120000` | Batas karakter history per panggilan ringkasan |
+| `WORKSPACE_UPLOAD_MAX_BYTES` | `52428800` | Batas ukuran per file upload (hard cap 250 MiB) |
 
 ### Penyimpanan data
 

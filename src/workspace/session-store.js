@@ -10,7 +10,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, posix, relative } from "node:path";
+import { basename, dirname, extname, join, posix, relative } from "node:path";
 import { resolveWithin } from "./path-sandbox.js";
 
 const SESSION_ID = /^[0-9a-f-]{36}$/i;
@@ -325,7 +325,7 @@ export class SessionStore {
       status: "ready",
       frames: [],
       usage: {
-        last: { promptTokens: 0, completionTokens: 0 },
+        last: { promptTokens: 0, completionTokens: 0, contextSize: 0 },
         total: { promptTokens: 0, completionTokens: 0 },
       },
       createdAt: now,
@@ -530,8 +530,13 @@ export class SessionStore {
     await cp(join(checkpoint, "workspace"), workspace, { recursive: true });
     const history = await this.history(id);
     await this.saveHistory(id, history.slice(0, meta.historyLength));
+    const session = await this.get(id);
+    const contextSummary = session.contextSummary
+      && session.contextSummary.upToIndex < meta.historyLength
+      ? session.contextSummary
+      : null;
     await rm(checkpoint, { recursive: true, force: true });
-    await this.update(id, { status: "ready" });
+    await this.update(id, { status: "ready", contextSummary });
     return { restored: entries[0] };
   }
 
@@ -576,6 +581,35 @@ export class SessionStore {
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, buffer);
     return { name: String(name || `image${extension}`).slice(0, 120), type, path };
+  }
+
+  async saveUploadedFile(id, { name, type, buffer }) {
+    await this.get(id);
+    if (!Buffer.isBuffer(buffer)) throw new HttpError(400, "Isi file tidak valid");
+
+    const displayName = String(name || "file")
+      .replace(/\\/g, "/")
+      .split("/")
+      .pop()
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .slice(0, 180) || "file";
+    const rawExtension = extname(displayName).toLowerCase();
+    const extension = rawExtension.replace(/[^.a-z0-9]/g, "").slice(0, 20);
+    const stem = displayName
+      .slice(0, displayName.length - rawExtension.length)
+      .normalize("NFKD")
+      .replace(/[^a-z0-9_-]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50) || "file";
+    const path = `uploads/${stem}-${randomUUID().slice(0, 8)}${extension}`;
+    const safeType = String(type || "application/octet-stream").split(";")[0].trim();
+    const contentType = /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(safeType)
+      ? safeType.slice(0, 120)
+      : "application/octet-stream";
+    const fullPath = await resolveWithin(this.workspaceDir(id), path);
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, buffer);
+    return { name: displayName, type: contentType, path, size: buffer.length };
   }
 
   /** Lokasi file thumbnail cache (di luar workspace/ supaya tidak ikut export/listFiles). */

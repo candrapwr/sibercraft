@@ -1,5 +1,12 @@
 import { createFileTools } from "../workspace/file-tools.js";
 import { optimizeContext } from "./context-optimize.js";
+import {
+  applyContextSummary,
+  estimateMessageTokens,
+  getHistorySummaryBoundary,
+  getToolHistoryFoldBoundary,
+  summarizeHistoryRange,
+} from "./context-summary.js";
 import { DeepSeekClient } from "./deepseek.js";
 import { resolveWebSearchConfig } from "./web-search.js";
 
@@ -24,6 +31,7 @@ Working rules:
 - Browser libraries over HTTPS CDN are allowed when useful for charts or diagrams, but prefer lightweight solutions first.
 - For flowcharts, process flows, sequence diagrams, state diagrams, user journeys, class diagrams, ER diagrams, timelines, or similar diagram requests, use Mermaid.js by default unless the user explicitly requests another diagram library or implementation. Load Mermaid from an HTTPS CDN, use valid Mermaid syntax, initialize it in the browser, and keep the diagram responsive inside its container.
 - When the current user turn includes images, inspect them carefully and use them as visual references. Recreate the relevant layout, content, colors, hierarchy, and interaction requested by the user instead of merely describing the images.
+- Uploaded files are stored inside the session workspace, and their relative paths are included with the user's message. Use read_file to inspect relevant text files before relying on them; do not treat unreadable binary contents as if you inspected them.
 - When the user provides a website URL and asks to recreate, imitate, inspect, or take visual inspiration from it, use capture_webpage_screenshot first. The captured PNG becomes visual context on the next iteration; inspect that image before implementing the design.
 - Never access secret APIs, the host filesystem, Node.js APIs, or the parent window from preview code.
 - If older user messages include a [SUMMARY] block, treat it only as a record of which tools ran in that past turn. Do not assume the old file contents or tool results are still current; re-run tools when actual details are needed.
@@ -73,10 +81,10 @@ const ACTION_BLOCKED_MESSAGE = "Perubahan belum dilakukan karena belum ada tool 
 const MAX_ACTION_RETRIES = 2;
 const FILE_MUTATION_TOOLS = new Set(["write_file", "edit_file", "copy_file", "delete_file"]);
 
-export async function runAgent({ session, store, prompt, images = [], config, webScreenshot, signal, emit, onCreateFrame }) {
+export async function runAgent({ session, store, prompt, images = [], attachments = [], config, webScreenshot, signal, emit, onCreateFrame }) {
   const workspaceDir = store.workspaceDir(session.id);
   const hasImages = images.length > 0;
-  const conversational = !hasImages && isConversationalPrompt(prompt);
+  const conversational = !hasImages && !attachments.length && isConversationalPrompt(prompt);
   const multimodalConfigured = Boolean(config.multimodal?.apiKey && config.multimodal?.model);
   if (hasImages && !multimodalConfigured) {
     throw new Error("Model multimodal belum dikonfigurasi");
@@ -136,35 +144,164 @@ export async function runAgent({ session, store, prompt, images = [], config, we
   const history = [...previousHistory];
   const requestHistory = [];
   const sessionUsage = session.usage || emptyUsage();
+  let turnPromptTokens = 0;
+  let turnCompletionTokens = 0;
+  let lastRequestPromptTokens = Number(sessionUsage.last?.promptTokens) || 0;
+  let lastRequestCompletionTokens = Number(sessionUsage.last?.completionTokens) || 0;
+  let lastContextTokens = Number(sessionUsage.last?.contextSize) || 0;
+  let lastContextEstimated = Boolean(sessionUsage.last?.contextSizeEstimated);
+  let contextSummary = session.contextSummary || null;
+  let turnSummary = "";
+  const attachUsageToError = (error) => {
+    if (error && typeof error === "object") {
+      error._aiUsage = {
+        promptTokens: turnPromptTokens,
+        completionTokens: turnCompletionTokens,
+        lastPromptTokens: lastRequestPromptTokens,
+        lastCompletionTokens: lastRequestCompletionTokens,
+        contextSize: lastContextTokens,
+        contextSizeEstimated: lastContextEstimated,
+        providerSource: config._providerSource || "server",
+      };
+    }
+    return error;
+  };
+  const messageAttachments = attachments.length
+    ? attachments
+    : images.map(({ name, type, path }) => ({ name, type, path }));
   const userMessage = {
     role: "user",
     content: prompt,
-    ...(images.length ? { attachments: images.map(({ name, type, path }) => ({ name, type, path })) } : {}),
+    ...(messageAttachments.length
+      ? { attachments: messageAttachments.map(({ name, type, path }) => ({ name, type, path })) }
+      : {}),
   };
-  const requestUserMessage = buildRequestUserMessage(prompt, images);
+  const requestUserMessage = buildRequestUserMessage(prompt, images, messageAttachments);
   history.push(userMessage);
   await store.saveHistory(session.id, history);
   await store.update(session.id, { status: "working", lastPrompt: prompt.slice(0, 140) });
-  const optimizedBase = conversational
-    ? { messages: previousHistory.map(toModelMessage), stats: { collapsedCount: 0, bytesSaved: 0 } }
-    : optimizeContext(previousHistory, config.contextOptimize);
-  if (!conversational && optimizedBase.stats.collapsedCount > 0) {
+
+  const optimizeConfig = config.contextOptimize || { enabled: false, mode: "summary" };
+  const keepRecentValue = Number(optimizeConfig.compactKeepRecent);
+  const keepRecent = Number.isFinite(keepRecentValue) ? Math.max(0, Math.floor(keepRecentValue)) : 2;
+  const contextWindow = Math.max(1, Number(optimizeConfig.contextWindow) || 200_000);
+  const compactThreshold = Number(optimizeConfig.compactThreshold) > 0
+    ? Math.min(1, Number(optimizeConfig.compactThreshold))
+    : 0.8;
+  const summaryMaxInputChars = Math.min(
+    Number(optimizeConfig.summaryMaxInputChars) || 120_000,
+    Math.max(4_000, Math.floor(contextWindow * 2)),
+  );
+  const summaryBoundary = getHistorySummaryBoundary(previousHistory, keepRecent);
+  const priorSummaryIndex = Number.isInteger(contextSummary?.upToIndex) ? contextSummary.upToIndex : -1;
+  if (contextSummary && (priorSummaryIndex < 0 || priorSummaryIndex >= previousHistory.length)) {
+    contextSummary = null;
+    session.contextSummary = null;
+    await store.update(session.id, { contextSummary: null });
+  }
+
+  // Estimate the first request's context from its actual pending messages.
+  // This is a per-request size, never a sum across tool iterations.
+  const estimatedInitialContextTokens = !hasImages
+    ? estimateMessageTokens([
+        { role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT },
+        ...applyContextSummary(previousHistory, contextSummary).messages.map(toModelMessage),
+        requestUserMessage,
+        { role: "system", content: JSON.stringify(conversational ? [] : tools.schemas) },
+      ])
+    : 0;
+
+  let summaryUsagePromptTokens = 0;
+  let summaryUsageCompletionTokens = 0;
+  const primaryAi = selectTurnAi(config, session, hasImages);
+  const shouldSummarizeHistory = Boolean(
+    optimizeConfig.enabled
+      && optimizeConfig.mode === "summary"
+      && summaryBoundary > (contextSummary?.upToIndex ?? -1)
+      && Math.max(lastContextTokens, estimatedInitialContextTokens) / contextWindow >= compactThreshold,
+  );
+  if (shouldSummarizeHistory) {
+    emit({ type: "context_compacting", scope: "history" });
+    const summaryClient = new DeepSeekClient({
+      apiKey: primaryAi.apiKey,
+      baseUrl: primaryAi.baseUrl,
+      model: primaryAi.model,
+      reasoningEffort: "none",
+      maxOutputTokens: Number(optimizeConfig.summaryMaxTokens) || 1200,
+    });
+    const startIndex = Math.max(0, (contextSummary?.upToIndex ?? -1) + 1);
+    const originalSummaryIndex = contextSummary?.upToIndex ?? -1;
+    try {
+      const result = await summarizeHistoryRange({
+        client: summaryClient,
+        messages: previousHistory,
+        startIndex,
+        endIndex: summaryBoundary,
+        previousSummary: contextSummary?.text || "",
+        maxInputChars: summaryMaxInputChars,
+        signal,
+        onChunk: async ({ summary, upToIndex, usage: summaryUsage }) => {
+          summaryUsagePromptTokens += summaryUsage?.prompt_tokens || 0;
+          summaryUsageCompletionTokens += summaryUsage?.completion_tokens || 0;
+          contextSummary = { text: summary, upToIndex, updatedAt: new Date().toISOString() };
+          session.contextSummary = contextSummary;
+          await store.update(session.id, { contextSummary });
+        },
+      });
+      turnPromptTokens += summaryUsagePromptTokens;
+      turnCompletionTokens += summaryUsageCompletionTokens;
+      if (result.chunks > 0) {
+        const turnsSummarized = previousHistory
+          .slice(originalSummaryIndex + 1, summaryBoundary + 1)
+          .filter((message) => message.role === "user").length;
+        emit({
+          type: "context_compacted",
+          scope: "history",
+          turnsSummarized,
+          summaryChars: result.summary.length,
+        });
+      }
+    } catch (error) {
+      turnPromptTokens += summaryUsagePromptTokens;
+      turnCompletionTokens += summaryUsageCompletionTokens;
+      if (signal?.aborted || error.name === "AbortError") {
+        await store.update(session.id, { status: "error" });
+        throw attachUsageToError(error);
+      }
+      emit({ type: "context_compaction_error", scope: "history" });
+      console.warn(`Gagal merangkum history sesi ${session.id}: ${error.message}`);
+    }
+  }
+
+  const optimizedBase = optimizeConfig.enabled && optimizeConfig.mode === "summary"
+    ? applyContextSummary(previousHistory, contextSummary)
+    : optimizeContext(previousHistory, optimizeConfig);
+  if (optimizeConfig.mode === "drop" && optimizedBase.stats.bytesSaved > 0) {
     emit({ type: "context_optimized", bytesSaved: optimizedBase.stats.bytesSaved });
   }
-  await store.saveOptimizedHistory(session.id, [...optimizedBase.messages, userMessage], {
-    collapsedCount: optimizedBase.stats.collapsedCount,
-    bytesSaved: optimizedBase.stats.bytesSaved,
-    mode: config.contextOptimize.mode,
-  });
+  try {
+    await store.saveOptimizedHistory(session.id, [...optimizedBase.messages, userMessage], {
+      collapsedCount: optimizedBase.stats.collapsedCount,
+      bytesSaved: optimizedBase.stats.bytesSaved,
+      mode: optimizeConfig.mode,
+      summaryUpToIndex: contextSummary?.upToIndex ?? -1,
+    });
+  } catch (error) {
+    throw attachUsageToError(error);
+  }
 
   const requestBase = () => {
-    const base = [...optimizedBase.messages, requestUserMessage, ...requestHistory.map(toModelMessage)];
+    const base = [...optimizedBase.messages.map(toModelMessage), requestUserMessage, ...requestHistory.map(toModelMessage)];
+    if (turnSummary) {
+      base.splice(optimizedBase.messages.length + 1, 0, {
+        role: "user",
+        content: `[Current task progress summary]\n${turnSummary}`,
+      });
+    }
     return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...base];
   };
   let finalText = "";
   let usage = null;
-  let turnPromptTokens = 0;
-  let turnCompletionTokens = 0;
   let visualContextAvailable = hasImages;
   const modelsUsed = [];
   const actionRequired = !conversational && requiresWorkspaceAction(prompt);
@@ -192,24 +329,85 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       if (!lastModel || lastModel.model !== iterationAi.model || lastModel.mode !== iterationAi.mode) {
         modelsUsed.push({ model: iterationAi.model, mode: iterationAi.mode });
       }
+      if (
+        iteration > 0
+        && optimizeConfig.enabled
+        && optimizeConfig.mode === "summary"
+        && !visualContextAvailable
+        && estimateMessageTokens([
+          ...requestBase(),
+          { role: "system", content: JSON.stringify(conversational ? [] : tools.schemas) },
+        ]) / contextWindow >= compactThreshold
+      ) {
+        const foldBoundary = getToolHistoryFoldBoundary(requestHistory, keepRecent);
+        if (foldBoundary >= 0) {
+          const foldedMessages = requestHistory.slice(0, foldBoundary + 1);
+          const foldClient = new DeepSeekClient({
+            apiKey: iterationAi.apiKey,
+            baseUrl: iterationAi.baseUrl,
+            model: iterationAi.model,
+            reasoningEffort: "none",
+            maxOutputTokens: Number(optimizeConfig.summaryMaxTokens) || 1200,
+          });
+          emit({ type: "context_compacting", scope: "turn" });
+          let generatedTurnSummary = turnSummary;
+          try {
+            const foldResult = await summarizeHistoryRange({
+              client: foldClient,
+              messages: foldedMessages,
+              previousSummary: turnSummary,
+              contextNote: `Current user request to preserve:\n${prompt}`,
+              maxInputChars: summaryMaxInputChars,
+              signal,
+              onChunk: ({ summary, usage: summaryUsage }) => {
+                generatedTurnSummary = summary;
+                turnPromptTokens += summaryUsage?.prompt_tokens || 0;
+                turnCompletionTokens += summaryUsage?.completion_tokens || 0;
+              },
+            });
+            turnSummary = foldResult.summary || generatedTurnSummary;
+            requestHistory.splice(0, foldBoundary + 1);
+            emit({
+              type: "context_compacted",
+              scope: "turn",
+              turnsSummarized: foldedMessages.filter((message) => message.role === "assistant" && message.tool_calls?.length).length,
+              summaryChars: turnSummary.length,
+            });
+          } catch (error) {
+            if (signal?.aborted || error.name === "AbortError") throw error;
+            emit({ type: "context_compaction_error", scope: "turn" });
+            console.warn(`Gagal merangkum proses aktif sesi ${session.id}: ${error.message}`);
+          }
+        }
+      }
+
       emit({ type: "status", status: iteration === 0 ? "thinking" : "working" });
       emit({ type: "iteration_model", iteration: iteration + 1, model: iterationAi.model, mode: iterationAi.mode });
       emit({ type: "assistant_start" });
       const messages = requestBase();
+      const estimatedRequestContextTokens = !visualContextAvailable
+        ? estimateMessageTokens([
+            ...messages,
+            { role: "system", content: JSON.stringify(conversational ? [] : tools.schemas) },
+          ])
+        : 0;
+      if (estimatedRequestContextTokens > 0) {
+        lastContextTokens = estimatedRequestContextTokens;
+        lastContextEstimated = true;
+      }
       if (config.requestLogging) {
         await store.appendLlmRequestLog(session.id, {
           timestamp: new Date().toISOString(),
           sessionId: session.id,
           iteration: iteration + 1,
           conversational,
-          optimization: conversational
-            ? { enabled: false, mode: "conversation-bypass" }
-            : {
-                enabled: Boolean(config.contextOptimize?.enabled),
-                mode: config.contextOptimize?.mode || "summary",
-                collapsedCount: optimizedBase.stats.collapsedCount,
-                bytesSaved: optimizedBase.stats.bytesSaved,
-              },
+          optimization: {
+            enabled: Boolean(optimizeConfig.enabled),
+            mode: optimizeConfig.mode || "summary",
+            collapsedCount: optimizedBase.stats.collapsedCount,
+            bytesSaved: optimizedBase.stats.bytesSaved,
+            summaryUpToIndex: contextSummary?.upToIndex ?? -1,
+          },
           request: {
             model: iterationAi.model,
             mode: iterationAi.mode,
@@ -272,6 +470,12 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       if (completion.usage) {
         turnPromptTokens += completion.usage.prompt_tokens || 0;
         turnCompletionTokens += completion.usage.completion_tokens || 0;
+        lastRequestPromptTokens = completion.usage.prompt_tokens || 0;
+        lastRequestCompletionTokens = completion.usage.completion_tokens || 0;
+        if (completion.usage.prompt_tokens > 0) {
+          lastContextTokens = completion.usage.prompt_tokens;
+          lastContextEstimated = false;
+        }
       }
       const isolated = isolateCreateFrameToolCall(completion.message);
       if (isolated.changed) {
@@ -341,8 +545,10 @@ export async function runAgent({ session, store, prompt, images = [], config, we
         finalText = completion.message.content || "Selesai.";
         const nextUsage = {
           last: {
-            promptTokens: turnPromptTokens,
-            completionTokens: turnCompletionTokens,
+            promptTokens: lastRequestPromptTokens,
+            completionTokens: lastRequestCompletionTokens,
+            contextSize: lastContextTokens,
+            contextSizeEstimated: lastContextEstimated,
           },
           total: {
             promptTokens: (sessionUsage.total?.promptTokens || 0) + turnPromptTokens,
@@ -435,7 +641,7 @@ export async function runAgent({ session, store, prompt, images = [], config, we
       iteration: typeof iteration === "number" ? iteration : null,
       modelsUsed: modelsUsed.at(-1) || { model: config.model, mode: hasImages ? "multimodal" : "primary" },
     };
-    throw error;
+    throw attachUsageToError(error);
   }
 }
 
@@ -468,7 +674,7 @@ function presentToolResult(name, result) {
 
 function emptyUsage() {
   return {
-    last: { promptTokens: 0, completionTokens: 0 },
+    last: { promptTokens: 0, completionTokens: 0, contextSize: 0 },
     total: { promptTokens: 0, completionTokens: 0 },
   };
 }
@@ -548,12 +754,18 @@ export function compactFinalResponse(value, maxWords = 60, maxSentences = 3) {
   return result;
 }
 
-export function buildRequestUserMessage(prompt, images = []) {
-  if (!images.length) return { role: "user", content: prompt };
+export function buildRequestUserMessage(prompt, images = [], attachments = []) {
+  const references = attachments.filter((item) => item?.path).map((item) =>
+    `- ${item.name || item.path}: ${item.path}`
+  );
+  const text = references.length
+    ? `${prompt}\n\nUploaded files in the workspace (use these paths as references):\n${references.join("\n")}\nUse read_file for relevant text files.`
+    : prompt;
+  if (!images.length) return { role: "user", content: text };
   return {
     role: "user",
     content: [
-      { type: "text", text: prompt },
+      { type: "text", text },
       ...images.map((image) => ({ type: "image_url", image_url: { url: image.dataUrl } })),
     ],
   };
@@ -591,7 +803,16 @@ export function selectTurnAi(config, session, hasImages) {
 }
 
 export function toModelMessage(message) {
-  const clean = { role: message.role, content: message.content };
+  let content = message.content;
+  if (message.role === "user" && Array.isArray(message.attachments) && typeof content === "string") {
+    const references = message.attachments
+      .filter((item) => item?.path)
+      .map((item) => `- ${item.name || item.path}: ${item.path}`);
+    if (references.length) {
+      content = `${content}\n\nPreviously uploaded workspace files:\n${references.join("\n")}\nUse read_file for relevant text files.`;
+    }
+  }
+  const clean = { role: message.role, content };
   if (message.tool_calls) clean.tool_calls = message.tool_calls;
   if (message.tool_call_id) clean.tool_call_id = message.tool_call_id;
   if (message.name) clean.name = message.name;

@@ -24,6 +24,10 @@ if (!process.env.SESSION_SECRET?.trim()) {
 export const config = {
   port: toPositiveInt(process.env.PORT, 3000),
   dataDir: resolve(process.env.DATA_DIR || "data"),
+  workspaceUploadMaxBytes: Math.min(
+    toPositiveInt(process.env.WORKSPACE_UPLOAD_MAX_BYTES, 50 * 1024 * 1024),
+    250 * 1024 * 1024,
+  ),
   appUrl: (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, ""),
   webScreenshot: {
     endpoint: process.env.WEB_SCREENSHOT_API_URL || "https://snap.idsiber.com/api/screenshot",
@@ -60,6 +64,11 @@ export const config = {
     contextOptimize: {
       enabled: toBoolean(process.env.CONTEXT_OPTIMIZE, true),
       mode: process.env.CONTEXT_OPTIMIZE_MODE === "drop" ? "drop" : "summary",
+      contextWindow: toPositiveInt(process.env.CONTEXT_WINDOW, 200000),
+      compactThreshold: toRatio(process.env.CONTEXT_OPTIMIZE_THRESHOLD, 0.8),
+      compactKeepRecent: toNonNegativeInt(process.env.CONTEXT_OPTIMIZE_KEEP_RECENT, 2),
+      summaryMaxTokens: toPositiveInt(process.env.CONTEXT_SUMMARY_MAX_TOKENS, 1200),
+      summaryMaxInputChars: toPositiveInt(process.env.CONTEXT_SUMMARY_MAX_INPUT_CHARS, 120000),
     },
     multimodal: {
       apiKey: process.env.MULTIMODAL_API_KEY || process.env.PRIMARY_API_KEY || "",
@@ -97,6 +106,16 @@ function loadEnvFile(path) {
 function toPositiveInt(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function toNonNegativeInt(value, fallback) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function toRatio(value, fallback) {
+  const parsed = Number.parseFloat(value ?? "");
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : fallback;
 }
 
 function toBoolean(value, fallback) {
