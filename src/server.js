@@ -456,12 +456,16 @@ async function handleApi(request, response, url, user) {
   }
   if (method === "POST" && action === "stop") {
     await store.getForEdit(id, access);
+    const body = await readJson(request, 2_000);
     const run = activeRuns.get(id);
-    if (run) {
-      run.intentional = true; // mark so the catch handler skips logging this abort
+    const requestedRunId = typeof body.runId === "string" ? body.runId : "";
+    if (run && (!requestedRunId || requestedRunId === run.runId)) {
+      if (body.networkCleanup !== true) run.intentional = true;
       run.controller.abort();
+      await run.finished;
+      return sendJson(response, 200, { stopped: true });
     }
-    return sendJson(response, 200, { stopped: Boolean(run) });
+    return sendJson(response, 200, { stopped: false });
   }
   // Rename session. action = "rename"
   if (method === "POST" && action === "rename") {
@@ -772,8 +776,19 @@ function toPublicUser(user) {
 }
 
 async function streamChat(request, response, id, access) {
-  if (activeRuns.has(id)) throw new HttpError(409, "AI masih bekerja pada sesi ini");
   const body = await readJson(request, 16_000_000);
+  const existingRun = activeRuns.get(id);
+  if (existingRun) {
+    const supersedesRun = typeof body.supersedesRunId === "string"
+      && body.supersedesRunId === existingRun.runId;
+    if (supersedesRun) existingRun.controller.abort();
+    if (!supersedesRun && !existingRun.controller.signal.aborted && !existingRun.finishing) {
+      throw new HttpError(409, "AI masih bekerja pada sesi ini");
+    }
+    await existingRun.finished;
+    if (activeRuns.has(id)) throw new HttpError(409, "AI masih bekerja pada sesi ini");
+  }
+  const runId = typeof body.runId === "string" && body.runId.length <= 100 ? body.runId : null;
   const imagePayloads = parseImagePayloads(body.images);
   const session = await store.getForEdit(id, access);
   const uploadedFiles = await validateUploadedReferences(id, body.uploads);
@@ -814,7 +829,15 @@ async function streamChat(request, response, id, access) {
     "X-Content-Type-Options": "nosniff",
   });
   const controller = new AbortController();
-  activeRuns.set(id, { controller, intentional: false });
+  let finishRun;
+  const run = {
+    controller,
+    runId,
+    intentional: false,
+    finishing: false,
+    finished: new Promise((resolve) => { finishRun = resolve; }),
+  };
+  activeRuns.set(id, run);
   let finished = false;
   const emit = (event) => {
     let publicEvent = event;
@@ -913,7 +936,7 @@ async function streamChat(request, response, id, access) {
     }
   } finally {
     finished = true;
-    activeRuns.delete(id);
+    run.finishing = true;
     previewDrafts.delete(id);
     response.end();
     // Attribute token consumption to the user ONLY when their own private
@@ -928,6 +951,8 @@ async function streamChat(request, response, id, access) {
     if (result?.mutated) {
       generateThumbnailForSession(id).catch(() => {});
     }
+    if (activeRuns.get(id) === run) activeRuns.delete(id);
+    finishRun();
   }
 }
 

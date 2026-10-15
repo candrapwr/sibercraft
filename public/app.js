@@ -10,6 +10,7 @@ let followLatestMessage = true;
 let activityTimer = null;
 let activityStartedAt = 0;
 let stopRequested = false;
+let activeClientRun = null;
 let contextStatusTimer = null;
 
 boot();
@@ -2203,6 +2204,15 @@ async function sendPrompt(event) {
   if (!state.config?.aiConfigured) return notify(t("missingApiKey"), true);
   if (images.length && !state.config?.multimodalConfigured) return notify(t("multimodalUnavailable"), true);
 
+  const sessionId = state.session.id;
+  const recoveryKey = `sibercraft:pending-run:${sessionId}`;
+  const runId = crypto.randomUUID();
+  let supersedesRunId = null;
+  try {
+    supersedesRunId = sessionStorage.getItem(recoveryKey) || null;
+    sessionStorage.setItem(recoveryKey, runId);
+  } catch {}
+  activeClientRun = { sessionId, runId, recoveryKey };
   state.running = true;
   stopRequested = false;
   followLatestMessage = true;
@@ -2233,12 +2243,15 @@ async function sendPrompt(event) {
   setWorkspaceStatus("working", "statusWorking");
 
   try {
-    const response = await fetch(`/api/sessions/${state.session.id}/chat`, {
+    const response = await fetch(`/api/sessions/${sessionId}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images, uploads }),
+      body: JSON.stringify({ prompt, images, uploads, runId, supersedesRunId }),
     });
-    if (!response.ok) throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
+    if (!response.ok) {
+      try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
+      throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
+    }
     await readNdjson(response.body, (eventData) => {
       if (eventData.type === "assistant_start") {
         setWorkspaceStatus("working", "assistantPreparing");
@@ -2344,6 +2357,7 @@ async function sendPrompt(event) {
         throw new Error(eventData.message);
       }
     });
+    try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
     flushBufferedContent();
     finalizeAssistantTurn();
     setWorkspaceStatus("ready", "statusReady");
@@ -2352,6 +2366,19 @@ async function sendPrompt(event) {
     syncUndoState(state.session.checkpointCount);
     refreshPreview();
   } catch (error) {
+    if ((error instanceof TypeError || error.name === "NetworkError") && !stopRequested) {
+      try {
+        await api(`/api/sessions/${sessionId}/stop`, {
+          method: "POST",
+          body: { runId, networkCleanup: true },
+        });
+        if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey);
+      } catch {
+        // Keep the run ID so the next prompt can stop this orphaned run.
+      }
+    } else {
+      try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
+    }
     flushBufferedContent();
     setContextStatus("");
     for (const tool of state.activeToolBlocks.values()) {
@@ -2369,6 +2396,7 @@ async function sendPrompt(event) {
   } finally {
     state.running = false;
     setRunningUi(false);
+    if (activeClientRun?.runId === runId) activeClientRun = null;
     autoResizePrompt();
     ui.promptInput.focus();
   }
@@ -2447,7 +2475,16 @@ async function stopAgent() {
   stopRequested = true;
   ui.stopButton.disabled = true;
   setWorkspaceStatus("working", "statusStopping");
-  try { await api(`/api/sessions/${state.session.id}/stop`, { method: "POST" }); }
+  const run = activeClientRun;
+  try {
+    await api(`/api/sessions/${run?.sessionId || state.session.id}/stop`, {
+      method: "POST",
+      ...(run ? { body: { runId: run.runId } } : {}),
+    });
+    if (run) {
+      try { if (sessionStorage.getItem(run.recoveryKey) === run.runId) sessionStorage.removeItem(run.recoveryKey); } catch {}
+    }
+  }
   catch (error) {
     stopRequested = false;
     ui.stopButton.disabled = false;
