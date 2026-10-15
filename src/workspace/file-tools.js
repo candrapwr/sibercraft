@@ -134,17 +134,28 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       const start = (offset ?? 1) - 1;
       return lines.slice(start, limit ? start + limit : undefined).join("\n");
     }),
-    tool("write_file", "Create or overwrite a text file. Parent directories are created automatically. The parameter is named `path` (NOT `file`); `file` is only used by create_frame. CRITICAL: always emit `path` BEFORE `content` in the JSON object (e.g. {\"path\":\"index.html\",\"content\":\"...\"}) so the preview can stream live — if `content` comes first, the preview cannot update until the whole file finishes.", {
+    tool("write_file", "Prepare a preview frame, then create or overwrite a text file. For an existing registered preview, FIRST call this tool with only `frame_id` and `path` as an exclusive tool call (no `content`). After the PREPARED result, call it again with `frame_id`, `path`, and `content`. A successful create_frame already prepares its frame, so its next write_file call may include content directly. For files unrelated to a preview, use an empty frame_id and include content directly. ALWAYS order arguments as frame_id, path, content. This two-step flow starts frame activity before a provider begins generating a large non-streamed content argument.", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this FIRST in the JSON object, before content." },
-        content: { type: "string", description: "Full file contents. Emit this AFTER path in the JSON object." },
+        frame_id: { type: "string", description: "ID of the registered preview frame affected by this write. Emit this FIRST in the JSON object; use an empty string when no preview frame is associated with the file." },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this after frame_id and before content." },
+        content: { type: "string", description: "Full file contents. Omit this only for the first preview-preparation call; include it after path in the following write call." },
       },
-      required: ["path", "content"],
+      required: ["frame_id", "path"],
       additionalProperties: false,
-    }, async ({ path, content }) => {
+    }, async ({ frame_id, path, content }) => {
       if (!path || !String(path).trim()) {
         throw new Error("Parameter 'path' wajib diisi (mis. 'index.html'). Catatan: parameter ini bernama 'path', bukan 'file' — 'file' hanya dipakai oleh create_frame.");
+      }
+      if (content === undefined) {
+        const cleanFrameId = String(frame_id || "").trim();
+        if (!cleanFrameId) throw new Error("frame_id wajib diisi untuk menyiapkan animasi preview sebelum write_file");
+        if (!options.onPrepareFrame) throw new Error("Preview frame tidak dapat disiapkan");
+        const frame = await options.onPrepareFrame({ frameId: cleanFrameId, path, operation: "write_file" });
+        return {
+          result: `[WRITE_FRAME_PREPARED] Frame ${frame.id} siap untuk ${path}. Sekarang panggil write_file lagi dengan frame_id dan path yang sama serta content lengkap; jangan panggil tahap persiapan lagi.`,
+          mutated: false,
+        };
       }
       if (typeof content !== "string" || content.length > 2_000_000) throw new Error("Content file tidak valid atau terlalu besar");
       const fullPath = await resolveWithin(workspaceDir, path);
@@ -155,19 +166,33 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
       await onMutation(path);
       return `Berhasil menulis ${content.length} byte ke ${path}`;
     }, true),
-    tool("edit_file", "Replace unique text inside a file. Include enough surrounding context so old_string matches only once. The parameter is named `path` (NOT `file`). Always emit `path` FIRST in the JSON object so the editing frame can be identified early.", {
+    tool("edit_file", "Prepare a preview frame, then replace unique text inside a file. Use this for a small localized replacement; for a broad redesign requiring many replacements in one file, prefer read_file followed by one complete write_file. For a registered preview, FIRST call this tool with only `frame_id` and `path` as an exclusive tool call. After the EDIT_FRAME_PREPARED result, call it again with `frame_id`, `path`, `old_string`, and `new_string`. For files unrelated to a preview, use an empty frame_id and include the edit strings directly. ALWAYS order frame_id first and path second. Include enough surrounding context so old_string matches only once.", {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this FIRST in the JSON object." },
-        old_string: { type: "string", description: "Exact text to replace" },
-        new_string: { type: "string", description: "Replacement text" },
+        frame_id: { type: "string", description: "ID of the registered preview frame affected by this edit. Emit this FIRST; use an empty string when no preview frame is associated with the file." },
+        path: { type: "string", description: "File path relative to the workspace (this parameter is named 'path', not 'file'). Emit this after frame_id." },
+        old_string: { type: "string", description: "Exact text to replace. Omit together with new_string only for the preview-preparation call." },
+        new_string: { type: "string", description: "Replacement text. Omit together with old_string only for the preview-preparation call." },
         replace_all: { type: "boolean", description: "Replace every occurrence; default false" },
       },
-      required: ["path", "old_string", "new_string"],
+      required: ["frame_id", "path"],
       additionalProperties: false,
-    }, async ({ path, old_string, new_string, replace_all = false }) => {
+    }, async ({ frame_id, path, old_string, new_string, replace_all = false }) => {
       if (!path || !String(path).trim()) {
         throw new Error("Parameter 'path' wajib diisi (mis. 'index.html'). Catatan: parameter ini bernama 'path', bukan 'file'.");
+      }
+      if (old_string === undefined && new_string === undefined) {
+        const cleanFrameId = String(frame_id || "").trim();
+        if (!cleanFrameId) throw new Error("frame_id wajib diisi untuk menyiapkan animasi preview sebelum edit_file");
+        if (!options.onPrepareFrame) throw new Error("Preview frame tidak dapat disiapkan");
+        const frame = await options.onPrepareFrame({ frameId: cleanFrameId, path, operation: "edit_file" });
+        return {
+          result: `[EDIT_FRAME_PREPARED] Frame ${frame.id} siap untuk ${path}. Sekarang panggil edit_file lagi dengan frame_id dan path yang sama serta old_string dan new_string; jangan panggil tahap persiapan lagi.`,
+          mutated: false,
+        };
+      }
+      if (typeof old_string !== "string" || typeof new_string !== "string") {
+        throw new Error("old_string dan new_string wajib diisi bersama untuk menjalankan edit_file");
       }
       if (old_string === new_string) throw new Error("old_string dan new_string identik");
       const fullPath = await resolveWithin(workspaceDir, path);
@@ -242,7 +267,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
     ...(options.onCreateFrame ? [
       tool(
         "create_frame",
-        "Register a new preview frame in the canvas. A frame displays one HTML file from the workspace as a live preview the user can see. EXCLUSIVE TOOL: when you call create_frame, it must be the only tool call in that assistant response. Do not call write_file, edit_file, read_file, list_dir, or any other tool in the same response. Wait for the create_frame result, then write that file's content with write_file in the next assistant turn. Call this once per distinct page/surface you create. The `file` must end in .html or .htm. Use a meaningful filename since the frame title is derived from it (e.g. dashboard.html -> 'dashboard').",
+        "Register and prepare a new preview frame in the canvas. A frame displays one HTML file from the workspace as a live preview the user can see. EXCLUSIVE TOOL: when you call create_frame, it must be the only tool call in that assistant response. Do not call write_file, edit_file, read_file, list_dir, or any other tool in the same response. Wait for the create_frame result, then write that file's content with write_file in the next assistant turn; do not run write_file's separate preparation step because create_frame already prepared it. Call this once per distinct page/surface you create. The `file` must end in .html or .htm. Use a meaningful filename since the frame title is derived from it (e.g. dashboard.html -> 'dashboard').",
         {
           type: "object",
           properties: {
@@ -265,9 +290,10 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
             return { result: `Error: file harus berakhiran .html atau .htm (diterima: ${file})` };
           }
           const frame = await options.onCreateFrame({ file: cleanFile, device });
+          const frameReference = frame?.id ? ` Frame ID: ${frame.id}. Frame ini sudah PREPARED; panggil write_file berikutnya langsung dengan {\"frame_id\":\"${frame.id}\",\"path\":\"${cleanFile}\",\"content\":\"...\"} dan jangan jalankan tahap persiapan lagi.` : "";
           const result = frame?.reused
-            ? `Frame yang sudah ada dipakai untuk ${cleanFile} (device: ${frame.device}). Jangan buat frame kedua; lanjutkan dengan write_file bila perlu.`
-            : `Frame dibuat untuk ${cleanFile} (device: ${frame.device}). Sekarang tulis isi file tersebut dengan write_file.`;
+            ? `Frame yang sudah ada dipakai untuk ${cleanFile} (device: ${frame.device}). Jangan buat frame kedua; lanjutkan dengan write_file bila perlu.${frameReference}`
+            : `Frame dibuat untuk ${cleanFile} (device: ${frame.device}). Sekarang tulis isi file tersebut dengan write_file.${frameReference}`;
           return { result, frame };
         },
         true,
@@ -359,7 +385,7 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
           return {
             ok,
             result,
-            mutated: ok && selected.mutates,
+            mutated: ok && (Object.hasOwn(output, "mutated") ? Boolean(output.mutated) : selected.mutates),
             artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
             ...(output.frame ? { frame: output.frame } : {}),
             ...(Array.isArray(output.frames) ? { frames: output.frames } : {}),

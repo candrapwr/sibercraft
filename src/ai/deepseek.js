@@ -50,6 +50,7 @@ export class DeepSeekClient {
     let finishReason = null;
     let usage = null;
     const toolCalls = new Map();
+    const toolArgumentChunkCounts = new Map();
 
     for await (const payload of parseSSE(response.body)) {
       if (payload.usage) usage = payload.usage;
@@ -65,13 +66,17 @@ export class DeepSeekClient {
         const current = toolCalls.get(call.index) || { id: "", type: "function", function: { name: "", arguments: "" } };
         if (call.id) current.id = call.id;
         if (call.function?.name) current.function.name += call.function.name;
-        if (call.function?.arguments) current.function.arguments += call.function.arguments;
+        if (call.function?.arguments) {
+          current.function.arguments += call.function.arguments;
+          toolArgumentChunkCounts.set(call.index, (toolArgumentChunkCounts.get(call.index) || 0) + 1);
+        }
         toolCalls.set(call.index, current);
         onToolCall?.({
           index: call.index,
           id: current.id,
           name: current.function.name,
           arguments: current.function.arguments,
+          argumentChunkCount: toolArgumentChunkCounts.get(call.index) || 0,
         });
       }
     }

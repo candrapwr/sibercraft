@@ -304,6 +304,34 @@ export function onDraftClear(path) {
   canvas.getFrames().filter((f) => f.file === path).forEach((f) => canvas.reloadFrame(f.id));
 }
 
+/** Show tool activity without reloading the iframe; frame_id works before path is streamed. */
+export function onFrameWorking(frameId, path) {
+  if (!inCanvas) return;
+  let matches = frameId ? canvas.getFrames().filter((frame) => frame.id === frameId) : [];
+  if (!matches.length && path) matches = canvas.getFrames().filter((frame) => frame.file === path);
+  if (!matches.length) return;
+  if (frameId && matches.some((frame) => frame.id === frameId)) {
+    canvas.setFrameDrafting(frameId, true);
+  } else {
+    canvas.setDrafting(path, true);
+  }
+  const focusPath = matches[0].file || path;
+  if (activeDraftPath !== focusPath) {
+    activeDraftPath = focusPath;
+    canvas._internal.zoomToFrame(matches[0].id);
+  }
+}
+
+/** Clear tool activity; final file reloads arrive through preview/preview_draft_clear. */
+export function onFrameWorkingClear(frameId, path) {
+  if (!inCanvas) return;
+  if (frameId && canvas.getFrames().some((frame) => frame.id === frameId)) {
+    canvas.setFrameDrafting(frameId, false);
+  } else if (path) {
+    canvas.setDrafting(path, false);
+  }
+}
+
 /** Called when a new AI turn starts — reset focus tracking & cancel pending fit. */
 export function onTurnStart() {
   activeDraftPath = null;

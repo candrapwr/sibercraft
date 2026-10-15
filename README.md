@@ -184,6 +184,14 @@ Tool memiliki dua mode: `search` untuk mencari hingga lima sumber beserta URL, t
 
 Saat AI membuat atau mengubah file, preview di frame bersangkutan ter-update secara bertahap (bukan hanya hasil akhir). Anda melihat proses pembangunan secara real-time.
 
+`write_file` dan `edit_file` juga membawa `frame_id`. Untuk frame yang sudah ada, AI lebih dulu memanggil tool tanpa isi mutasi (`content` atau `old_string`/`new_string`) untuk menyalakan indikator, lalu mengirim perubahan lengkap pada iterasi berikutnya. Dengan dua tahap ini, indikator sudah aktif selama model menyusun argumen besar meskipun provider tidak melakukan streaming tool call. Frame yang baru dibuat otomatis disiapkan oleh `create_frame` untuk penulisan pertamanya.
+
+Saat provider mengirim argumen function tool dalam beberapa chunk, agent memeriksa urutannya. Jika payload write/edit muncul sebelum `path`, respons tetap ditampung sampai call lengkap tetapi tool dibatalkan sebelum eksekusi. Call lengkap dan receipt gagal sementara diberikan ke model agar retry mengulang perubahan yang benar dengan urutan `frame_id`, `path`, lalu payload mutasi; keduanya tidak disimpan ke history sesi. File tidak disentuh oleh call yang dibatalkan. Provider yang memakai SSE tetapi mengirim seluruh function call dalam satu chunk dianggap nonstreaming untuk tool tersebut dan tidak terkena pembatalan ini; indikatornya memakai tahap persiapan frame.
+
+Instruksi koreksi urutan hanya disisipkan ke satu request retry dan langsung dibuang setelah respons berikutnya berhasil diterima. Untuk perubahan visual yang luas dalam satu file, agent diarahkan memakai satu `write_file` lengkap agar tidak menghasilkan rangkaian `edit_file` kecil yang panjang.
+
+Jika model tetap mengirim `write_file` atau `edit_file` identik yang sudah berhasil pada versi file saat ini, agent memperlakukannya sebagai no-op dan tidak menyentuh file untuk kedua kalinya.
+
 ### Auto-zoom mengikuti frame aktif
 
 Canvas otomatis zoom-in ke frame yang sedang diedit agar terlihat jelas, lalu kembali ke tampilan menyeluruh (fit-all) setelah turn selesai. Bila AI mengedit beberapa frame bergantian dalam satu turn, fokus mengikutinya.

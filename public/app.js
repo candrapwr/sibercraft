@@ -1,4 +1,4 @@
-import { canvasView, onFrameCreated, onFrameDeleted, onPreviewUpdate, onDraftUpdate, onDraftClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js";
+import { canvasView, onFrameCreated, onFrameDeleted, onPreviewUpdate, onDraftUpdate, onDraftClear, onFrameWorking, onFrameWorkingClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js";
 import { initTooltips, setTip } from "/tooltip.js";
 import { $, $$ } from "/dom.js";
 import { loadLanguage, saveLanguage, translate } from "/i18n.js";
@@ -2293,13 +2293,12 @@ async function sendPrompt(event) {
         flushBufferedContent();
         replaceAssistantContent(eventData.content || "");
       } else if (eventData.type === "frame_working") {
-        // edit_file: signal that AI is working on this frame (drafting overlay).
-        // Emitted while the model generates edit_file args, so the overlay shows
-        // up early — unlike tool_args which fires only after the args are complete.
-        if (eventData.path) onDraftUpdate(eventData.path);
+        // A write preparation can activate the frame before the next model
+        // response starts. Streamed frame IDs and edit paths remain fallbacks.
+        // Preview events handle iframe reloads.
+        if (eventData.frameId || eventData.path) onFrameWorking(eventData.frameId, eventData.path);
       } else if (eventData.type === "frame_working_clear") {
-        // edit_file done: clear overlay + reload the frame to pick up the edit.
-        if (eventData.path) onDraftClear(eventData.path);
+        if (eventData.frameId || eventData.path) onFrameWorkingClear(eventData.frameId, eventData.path);
       } else if (eventData.type === "iteration_end") {
         flushBufferedContent();
         finalizeAssistantTurn();

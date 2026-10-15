@@ -64,6 +64,7 @@ export const canvas = {
   updateFrame,
   getFrames: () => [...frames.values()].map((f) => f.state),
   reloadFrame,
+  setFrameDrafting,
   setDrafting,
   clearAllDrafting,
   fitAll,
@@ -219,6 +220,12 @@ function setDrafting(file, on) {
   for (const frame of frames.values()) {
     if (frame.state.file === file) frame.el.classList.toggle("drafting", on);
   }
+}
+
+/** Toggle drafting on one exact frame, independent of its file path. */
+function setFrameDrafting(id, on) {
+  const frame = frames.get(id);
+  if (frame) frame.el.classList.toggle("drafting", on);
 }
 
 /** Clear the drafting state on every frame (safety net at turn end). */

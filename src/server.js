@@ -977,17 +977,36 @@ async function handlePreview(response, url) {
   const match = url.pathname.match(/^\/preview\/([0-9a-f-]{36})(?:\/(.*))?$/i);
   if (!match) throw new HttpError(404, "Preview tidak ditemukan");
   const [, id, requested = ""] = match;
-  await store.get(id);
-  const relativePath = requested || "index.html";
+  const session = await store.get(id);
+  let relativePath;
+  try {
+    relativePath = requested ? decodeURIComponent(requested) : "index.html";
+  } catch {
+    throw new HttpError(400, "Path preview tidak valid");
+  }
   const fullPath = await resolveWithin(store.workspaceDir(id), relativePath);
   const draft = previewDrafts.get(id)?.get(normalizeDraftPath(relativePath));
   let content;
   if (draft !== undefined) {
     content = Buffer.from(draft, "utf8");
   } else {
-    const info = await stat(fullPath);
-    if (!info.isFile()) throw new HttpError(404, "File preview tidak ditemukan");
-    content = await readFile(fullPath);
+    let info;
+    try {
+      info = await stat(fullPath);
+    } catch (error) {
+      const normalizedPath = normalizeDraftPath(relativePath);
+      const belongsToFrame = normalizedPath && (session.frames || []).some(
+        (frame) => normalizeDraftPath(frame.file) === normalizedPath,
+      );
+      if (error.code !== "ENOENT" || !belongsToFrame) throw error;
+      // A frame can be registered before its first write_file call. Keep that
+      // iframe visually empty while the workspace file is being created.
+      content = Buffer.from("<!doctype html><html><head><meta charset=\"utf-8\"><style>html,body{margin:0;min-height:100%;background:transparent}</style></head><body></body></html>", "utf8");
+    }
+    if (info && !info.isFile()) throw new HttpError(404, "File preview tidak ditemukan");
+    if (info) {
+      content = await readFile(fullPath);
+    }
   }
   response.writeHead(200, {
     "Content-Type": mimeType(fullPath),

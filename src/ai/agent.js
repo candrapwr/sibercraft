@@ -19,9 +19,12 @@ Working rules:
 - All deliverables must be static web files inside the workspace: HTML, CSS, JavaScript, SVG, JSON, or related text assets.
 - The workspace can hold multiple HTML files. Each preview frame in the canvas displays one HTML file. IMPORTANT: the user only sees files that have a registered frame. Before writing any HTML file the user should see, ALWAYS call create_frame({ file, device }) so a preview frame exists. If you write_file an HTML file without first registering it with create_frame, the user sees nothing until the very end. For the first action of any build task, call create_frame first, wait for that tool result, then write_file its content in the next assistant turn. Reuse an existing frame only when editing an already-shown file. Give each frame a meaningful filename (its title is derived from it). When creating a frame, pick the "device" that best matches the user's intent: "mobile"/"phone"/"app screen" -> mobile, "tablet"/"iPad" -> tablet, otherwise desktop. Default to desktop if unclear.
 - Tool-call exclusivity: NEVER combine create_frame with any other tool call in the same assistant response. When create_frame is needed, emit exactly one create_frame call and no other tool calls; after its result is returned, continue with write_file, edit_file, or other tools.
+- Before a write_file call with content for an existing preview frame, prepare that frame in a separate assistant iteration: call write_file with only frame_id and path, with no content, and make it the only tool call. After its [WRITE_FRAME_PREPARED] result, immediately call write_file again with the same frame_id and path plus content. Do not repeat the preparation call. A successful create_frame already prepares that frame, so the write_file immediately following create_frame must include content directly.
+- Before an edit_file call with old_string/new_string for a registered preview frame, prepare that frame in a separate assistant iteration: call edit_file with only frame_id and path and make it the only tool call. After its [EDIT_FRAME_PREPARED] result, immediately call edit_file again with the same frame_id and path plus old_string/new_string. Do not repeat the preparation call.
 - If the user asks to remove a preview frame, call delete_frame. This only removes the canvas frame; it does not delete the workspace file.
 - If the user asks to delete, remove, or clean up an actual workspace file or folder, call delete_file({ path, recursive }). delete_file removes the file from disk (unlike delete_frame, which only hides its preview). To delete a directory and everything inside it, set recursive=true. Never delete files you just created as part of the current task unless the user explicitly asks. If the deleted file had a frame, also call delete_frame so the canvas does not show a broken preview.
 - Use read_file before changing an existing file, and use list_dir when the workspace structure is still unclear.
+- Use edit_file for a small, localized replacement. For broad visual changes that require many replacements in the same file, read the current file and use one write_file call with the complete updated content instead of a long sequence of edit_file calls.
 - Use grep to search for a pattern across the workspace (e.g. find where a class, function, or string is used, locate a definition, or check references before refactoring). It returns matches as path:line: match. Prefer grep over reading many files one by one.
 - Use the file tools to implement the requested work for real, not just to describe code in chat.
 - Never claim that a file or frame was created, edited, or deleted until the corresponding tool has returned a SUCCESS result. A tool call in progress, an incomplete call, or a prior summary is not evidence that the operation happened.
@@ -39,7 +42,8 @@ Working rules:
 - The final answer must be a very short summary: Do not include implementation details, long lists, repeated explanations, suggestions, or full source code.
 
 Mandatory actions ! :
-- When calling write_file or edit_file, ALWAYS put "path" as the FIRST key in the JSON arguments object (e.g. {"path":"index.html","content":"..."}). The live preview needs the path before the content; if content comes first, the preview cannot update until the entire file has streamed and the user sees a frozen screen.
+- When calling write_file, ALWAYS put "frame_id" as the FIRST key, "path" as the SECOND key, and optional "content" LAST. Use the ID from create_frame or the runtime preview-frame registry when the write affects a preview; use an empty string when it does not.
+- When calling edit_file, ALWAYS put "frame_id" as the FIRST key and "path" as the SECOND key. Put old_string/new_string after them when executing the edit. Use an empty frame_id only when no preview frame is affected.
 
 `;
 
@@ -79,7 +83,10 @@ export function formatToolReceipt({ name, result, ok, mutated }) {
 const ACTION_RETRY_PROMPT = "Sistem: permintaan workspace belum memiliki bukti tool yang berhasil. Jangan mengklaim selesai. Jalankan tool yang diperlukan sekarang, lalu laporkan hasil sebenarnya.";
 const ACTION_BLOCKED_MESSAGE = "Perubahan belum dilakukan karena belum ada tool workspace yang berhasil. Silakan coba lagi.";
 const MAX_ACTION_RETRIES = 2;
+const MAX_ARGUMENT_ORDER_RETRIES = 2;
+const MIN_FRAME_ACTIVITY_MS = 240;
 const FILE_MUTATION_TOOLS = new Set(["write_file", "edit_file", "copy_file", "delete_file"]);
+const REPEAT_GUARDED_MUTATION_TOOLS = new Set(["write_file", "edit_file"]);
 
 export async function runAgent({ session, store, prompt, images = [], attachments = [], config, webScreenshot, signal, emit, onCreateFrame }) {
   const workspaceDir = store.workspaceDir(session.id);
@@ -92,7 +99,47 @@ export async function runAgent({ session, store, prompt, images = [], attachment
   let mutated = false;
   // Track which HTML files already have a frame this turn, so auto-create
   // fires at most once per file (avoids duplicate frames when AI edits repeatedly).
-  const framedFiles = new Set();
+  const initialFrames = Array.isArray(session.frames) ? session.frames : [];
+  const framedFiles = new Set(initialFrames.map((frame) => frame.file).filter(Boolean));
+  const knownFramesById = new Map(initialFrames.filter((frame) => frame?.id).map((frame) => [frame.id, frame]));
+  let preparedFrameActivity = null;
+  const clearPreparedFrameActivity = () => {
+    if (!preparedFrameActivity) return;
+    emit({
+      type: "frame_working_clear",
+      frameId: preparedFrameActivity.frameId,
+      path: preparedFrameActivity.path,
+    });
+    preparedFrameActivity = null;
+  };
+  const prepareFrameActivity = (frame, operation) => {
+    if (!frame?.id) return null;
+    if (preparedFrameActivity?.frameId === frame.id && preparedFrameActivity.operation === operation) {
+      return preparedFrameActivity;
+    }
+    clearPreparedFrameActivity();
+    preparedFrameActivity = {
+      frameId: frame.id,
+      path: frame.file,
+      operation,
+      startedAt: Date.now(),
+    };
+    emit({ type: "frame_working", frameId: frame.id, path: frame.file });
+    return preparedFrameActivity;
+  };
+  const currentSystemPrompt = () => {
+    const base = conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT;
+    if (conversational || knownFramesById.size === 0) return base;
+    const registry = [...knownFramesById.values()].map((frame) => ({
+      frame_id: frame.id,
+      file: frame.file,
+      device: frame.device,
+    }));
+    const preparedState = preparedFrameActivity
+      ? `\n${preparedFrameActivity.operation === "edit_file" ? "EDIT_FRAME_PREPARED" : "WRITE_FRAME_PREPARED"} is active for frame_id=${preparedFrameActivity.frameId} (${preparedFrameActivity.path}). The next ${preparedFrameActivity.operation} call for it MUST include the full mutation arguments directly; do not prepare it again.`
+      : "";
+    return `${base}\nRuntime preview-frame registry (use frame_id as the first write_file argument when the write affects one of these previews):\n${JSON.stringify(registry)}${preparedState}`;
+  };
 
   const tools = createFileTools(workspaceDir, async (path) => {
     mutated = true;
@@ -107,7 +154,11 @@ export async function runAgent({ session, store, prompt, images = [], attachment
       if (!hasFrame) {
         framedFiles.add(path);
         const frame = await onCreateFrame({ file: path, device: "desktop" });
+        if (frame?.id) knownFramesById.set(frame.id, frame);
         emit({ type: "frame_created", frame });
+      } else {
+        const existingFrame = current.frames.find((frame) => frame.file === path);
+        if (existingFrame?.id) knownFramesById.set(existingFrame.id, existingFrame);
       }
     }
   }, {
@@ -120,9 +171,22 @@ export async function runAgent({ session, store, prompt, images = [], attachment
     onCreateFrame: onCreateFrame ? async ({ file, device }) => {
       framedFiles.add(file); // AI registered it explicitly; don't auto-create later.
       const frame = await onCreateFrame({ file, device });
+      if (frame?.id) knownFramesById.set(frame.id, frame);
       if (!frame.reused) emit({ type: "frame_created", frame });
+      prepareFrameActivity(frame, "write_file");
       return frame;
     } : undefined,
+    onPrepareFrame: async ({ frameId, operation }) => {
+      let frame = knownFramesById.get(frameId);
+      if (!frame) {
+        const current = await store.get(session.id);
+        frame = Array.isArray(current.frames) ? current.frames.find((item) => item.id === frameId) : null;
+        if (frame?.id) knownFramesById.set(frame.id, frame);
+      }
+      if (!frame) throw new Error(`Frame ${frameId} tidak ditemukan`);
+      prepareFrameActivity(frame, operation);
+      return frame;
+    },
     onDeleteFrame: async ({ frameId, file }) => {
       const current = await store.get(session.id);
       const frames = Array.isArray(current.frames) ? current.frames : [];
@@ -136,6 +200,8 @@ export async function runAgent({ session, store, prompt, images = [], attachment
       mutated = true;
       await store.update(session.id, { status: "working" });
       framedFiles.delete(target.file);
+      knownFramesById.delete(target.id);
+      if (preparedFrameActivity?.frameId === target.id) clearPreparedFrameActivity();
       emit({ type: "frame_deleted", frameId: target.id, file: target.file, frames: nextFrames });
       return { removed: target, frames: nextFrames };
     },
@@ -204,7 +270,7 @@ export async function runAgent({ session, store, prompt, images = [], attachment
   // This is a per-request size, never a sum across tool iterations.
   const estimatedInitialContextTokens = !hasImages
     ? estimateMessageTokens([
-        { role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT },
+        { role: "system", content: currentSystemPrompt() },
         ...applyContextSummary(previousHistory, contextSummary).messages.map(toModelMessage),
         requestUserMessage,
         { role: "system", content: JSON.stringify(conversational ? [] : tools.schemas) },
@@ -293,6 +359,7 @@ export async function runAgent({ session, store, prompt, images = [], attachment
   }
 
   let requestDedupeStats = { removedRounds: 0, bytesSaved: 0, valid: true };
+  let transientRetryInstruction = "";
   const requestBase = () => {
     const base = [...optimizedBase.messages.map(toModelMessage), requestUserMessage, ...requestHistory.map(toModelMessage)];
     if (turnSummary) {
@@ -301,9 +368,12 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         content: `[Current task progress summary]\n${turnSummary}`,
       });
     }
+    if (transientRetryInstruction) {
+      base.push({ role: "user", content: transientRetryInstruction });
+    }
     const deduplicated = deduplicateToolHistory(base);
     requestDedupeStats = deduplicated.stats;
-    return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...deduplicated.messages];
+    return [{ role: "system", content: currentSystemPrompt() }, ...deduplicated.messages];
   };
   let finalText = "";
   let usage = null;
@@ -316,6 +386,8 @@ export async function runAgent({ session, store, prompt, images = [], attachment
   let successfulMutationCount = 0;
   let successfulFileMutationCount = 0;
   let actionRetryCount = 0;
+  let argumentOrderRetryCount = 0;
+  const latestMutationByPath = new Map();
 
   try {
     for (let iteration = 0; iteration < config.maxIterations; iteration++) {
@@ -429,7 +501,34 @@ export async function runAgent({ session, store, prompt, images = [], attachment
       }
       const announcedToolCalls = new Set();
       const draftProgress = new Map();
-      const editSignaled = new Set();
+      const writeActivities = new Map();
+      const editActivities = new Map();
+      const emitWriteActivity = (call) => {
+        if (call.name !== "write_file") return null;
+        if (isWriteFilePreparationArguments(call.arguments || "")) return null;
+        const existing = writeActivities.get(call.index);
+        if (existing) return existing;
+        const target = extractWriteFileTarget(call.arguments || "", knownFramesById);
+        if (!target) return null;
+        const matchesPrepared = preparedFrameActivity?.operation === "write_file" && (
+          target.frameId === preparedFrameActivity.frameId
+          || (!target.frameId && target.path === preparedFrameActivity.path)
+        );
+        if (matchesPrepared) {
+          writeActivities.set(call.index, preparedFrameActivity);
+          return preparedFrameActivity;
+        }
+        clearPreparedFrameActivity();
+        const activity = { ...target, startedAt: Date.now() };
+        writeActivities.set(call.index, activity);
+        emit({
+          type: "frame_working",
+          callIndex: call.index,
+          frameId: activity.frameId,
+          path: activity.path,
+        });
+        return activity;
+      };
       const emitWriteDraft = (call, force = false) => {
         if (call.name !== "write_file") return;
         const current = draftProgress.get(call.index) || { lastCheck: 0, lastContentLength: 0 };
@@ -445,34 +544,74 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         }
         draftProgress.set(call.index, current);
       };
-      // Signal the editing frame's path during arg streaming so the overlay
-      // shows up before edit_file finishes executing.
-      const emitEditDraft = (call) => {
-        if (call.name !== "edit_file") return;
-        if (editSignaled.has(call.index)) return;
-        const path = extractEditFileDraftPath(call.arguments || "");
-        if (path) {
-          editSignaled.add(call.index);
-          emit({ type: "frame_working", callIndex: call.index, path });
+      const emitEditActivity = (call) => {
+        if (call.name !== "edit_file") return null;
+        if (isEditFilePreparationArguments(call.arguments || "")) return null;
+        const existing = editActivities.get(call.index);
+        if (existing) return existing;
+        const target = extractWriteFileTarget(call.arguments || "", knownFramesById);
+        if (!target) return null;
+        const matchesPrepared = preparedFrameActivity?.operation === "edit_file" && (
+          target.frameId === preparedFrameActivity.frameId
+          || (!target.frameId && target.path === preparedFrameActivity.path)
+        );
+        if (matchesPrepared) {
+          editActivities.set(call.index, preparedFrameActivity);
+          return preparedFrameActivity;
         }
+        clearPreparedFrameActivity();
+        const activity = { ...target, operation: "edit_file", startedAt: Date.now() };
+        editActivities.set(call.index, activity);
+        emit({
+          type: "frame_working",
+          callIndex: call.index,
+          frameId: activity.frameId,
+          path: activity.path,
+        });
+        return activity;
       };
-      const completion = await client.complete({
-        messages,
-        tools: conversational ? [] : tools.schemas,
-        signal,
-        onContent: (delta) => {
-          emit({ type: "content", delta });
-        },
-        onToolCall: (call) => {
-          if (!call.name) return;
-          if (!announcedToolCalls.has(call.index)) {
-            announcedToolCalls.add(call.index);
-            emit({ type: "tool_start", callIndex: call.index, name: call.name });
-          }
-          emitWriteDraft(call);
-          emitEditDraft(call);
-        },
-      });
+      const completionController = new AbortController();
+      const forwardAbort = () => completionController.abort(signal?.reason);
+      if (signal?.aborted) forwardAbort();
+      else signal?.addEventListener("abort", forwardAbort, { once: true });
+      let argumentOrderViolation = null;
+      let completion;
+      try {
+        completion = await client.complete({
+          messages,
+          tools: conversational ? [] : tools.schemas,
+          signal: completionController.signal,
+          onContent: (delta) => {
+            emit({ type: "content", delta });
+          },
+          onToolCall: (call) => {
+            if (!call.name || argumentOrderViolation) return;
+            if (!announcedToolCalls.has(call.index)) {
+              announcedToolCalls.add(call.index);
+              emit({ type: "tool_start", callIndex: call.index, name: call.name });
+            }
+            // A single argument chunk means the provider buffered the function
+            // call even if the surrounding response uses SSE. In that mode the
+            // PREPARED frame handles animation, and argument order is irrelevant.
+            const violation = call.argumentChunkCount > 1
+              ? detectToolArgumentOrderViolation(call.name, call.arguments || "")
+              : null;
+            if (violation) {
+              argumentOrderViolation = { ...violation, callIndex: call.index, name: call.name };
+              // Keep consuming the response so the retry receives the complete
+              // intended call. Execution is still blocked below. Aborting here
+              // loses the unfinished arguments and makes the model copy the
+              // previous successful mutation instead.
+              return;
+            }
+            emitWriteActivity(call);
+            emitWriteDraft(call);
+            emitEditActivity(call);
+          },
+        });
+      } finally {
+        signal?.removeEventListener("abort", forwardAbort);
+      }
       usage = completion.usage || usage;
       if (completion.usage) {
         turnPromptTokens += completion.usage.prompt_tokens || 0;
@@ -484,17 +623,101 @@ export async function runAgent({ session, store, prompt, images = [], attachment
           lastContextEstimated = false;
         }
       }
-      const isolated = isolateCreateFrameToolCall(completion.message);
+      if (argumentOrderViolation) {
+        argumentOrderRetryCount++;
+        if (argumentOrderRetryCount > MAX_ARGUMENT_ORDER_RETRIES) {
+          throw new Error(`${argumentOrderViolation.name} berulang kali mengirim ${argumentOrderViolation.payloadKey} sebelum path`);
+        }
+        // Preserve the complete canceled call only in this turn's provider
+        // context. Its matching FAILED receipts keep the tool protocol valid
+        // and tell the model exactly which intended mutation must be retried.
+        // It is intentionally not persisted in the visible session history.
+        const canceledCalls = Array.isArray(completion.message.tool_calls)
+          ? completion.message.tool_calls
+          : [];
+        if (canceledCalls.length) {
+          requestHistory.push(completion.message);
+          for (const [callIndex, canceledCall] of canceledCalls.entries()) {
+            const canceledName = canceledCall.function?.name || "unknown";
+            const isOrderViolation = callIndex === argumentOrderViolation.callIndex;
+            requestHistory.push({
+              role: "tool",
+              tool_call_id: canceledCall.id,
+              name: canceledName,
+              content: formatToolReceipt({
+                name: canceledName,
+                result: isOrderViolation
+                  ? `Tidak dijalankan: parameter ${argumentOrderViolation.payloadKey} muncul sebelum path. Ulangi call yang sama dengan urutan argumen yang benar.`
+                  : "Tidak dijalankan karena respons tool yang sama mengandung pelanggaran urutan argumen.",
+                ok: false,
+                mutated: false,
+              }),
+            });
+          }
+        }
+        const activity = argumentOrderViolation.name === "write_file"
+          ? writeActivities.get(argumentOrderViolation.callIndex)
+          : editActivities.get(argumentOrderViolation.callIndex);
+        if (activity && activity !== preparedFrameActivity) {
+          emit({
+            type: "frame_working_clear",
+            callIndex: argumentOrderViolation.callIndex,
+            frameId: activity.frameId,
+            path: activity.path,
+          });
+        }
+        emit({
+          type: "tool_result",
+          callIndex: argumentOrderViolation.callIndex,
+          name: argumentOrderViolation.name,
+          result: `${argumentOrderViolation.name} dibatalkan: parameter ${argumentOrderViolation.payloadKey} muncul sebelum path.`,
+          ok: false,
+          status: "not_executed",
+          mutated: false,
+        });
+        emit({
+          type: "assistant_retry",
+          reason: "tool_argument_order",
+          attempt: argumentOrderRetryCount,
+        });
+        transientRetryInstruction = buildToolArgumentOrderRetryPrompt(argumentOrderViolation);
+        // A canceled provider response did not execute a tool, so preserve the
+        // configured tool-iteration budget for the corrected retry.
+        iteration--;
+        continue;
+      }
+      // Keep the correction for exactly one provider request. If it remained
+      // in requestHistory, later iterations could repeat a mutation that had
+      // already succeeded.
+      transientRetryInstruction = "";
+      argumentOrderRetryCount = 0;
+      const isolated = isolateExclusiveSetupToolCall(completion.message);
       if (isolated.changed) {
         completion.message = isolated.message;
-        emit({ type: "tool_batch_isolated", name: "create_frame", dropped: isolated.dropped });
+        emit({ type: "tool_batch_isolated", name: isolated.exclusiveName, dropped: isolated.dropped });
         for (const droppedCall of isolated.droppedCalls) {
           const droppedIndex = isolated.originalCalls.indexOf(droppedCall);
+          const droppedName = droppedCall.function?.name || "unknown";
+          const frameActivity = writeActivities.get(droppedIndex) || editActivities.get(droppedIndex);
+          if (frameActivity && frameActivity !== preparedFrameActivity) {
+            emit({
+              type: "frame_working_clear",
+              callIndex: droppedIndex,
+              frameId: frameActivity.frameId,
+              path: frameActivity.path,
+            });
+          }
+          const droppedDraft = extractWriteFileDraft(droppedCall.function?.arguments || "");
+          if (droppedDraft) emit({ type: "preview_draft_clear", path: droppedDraft.path });
+          if (droppedName === "edit_file" && !frameActivity) {
+            const editedPath = extractEditFileDraftPath(droppedCall.function?.arguments || "");
+            if (editedPath) emit({ type: "frame_working_clear", path: editedPath });
+          }
           emit({
             type: "tool_result",
             callIndex: droppedIndex,
-            name: droppedCall.function?.name || "unknown",
-            result: "Tool tidak dijalankan karena create_frame harus menjadi satu-satunya tool call pada respons ini.",
+            name: droppedName,
+            result: `Tool tidak dijalankan karena ${isolated.exclusiveName} harus menjadi satu-satunya tool call pada respons ini.`,
             ok: false,
             status: "not_executed",
             mutated: false,
@@ -534,6 +757,7 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         emit({ type: "final_content", content: ACTION_BLOCKED_MESSAGE });
       }
       if (isFinalResponse) {
+        clearPreparedFrameActivity();
         completion.message.models_used = modelsUsed;
       }
       if (!history.includes(completion.message)) {
@@ -590,7 +814,11 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         const callIndex = originalIndex >= 0 ? originalIndex : position;
         const name = call.function?.name || "unknown";
         const args = call.function?.arguments || "{}";
+        const writePreparation = name === "write_file" && isWriteFilePreparationArguments(args);
+        const editPreparation = name === "edit_file" && isEditFilePreparationArguments(args);
         // Force-flush any pending draft for this tool, then announce it right before execution.
+        const writeActivity = emitWriteActivity({ index: callIndex, name, arguments: args });
+        const editActivity = emitEditActivity({ index: callIndex, name, arguments: args });
         emitWriteDraft({ index: callIndex, name, arguments: args }, true);
         if (!announcedToolCalls.has(callIndex)) {
           emit({ type: "tool_start", callIndex, name, position: position + 1, total: calls.length });
@@ -598,21 +826,77 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         emit({ type: "tool_args", callIndex, name, arguments: args });
         await flushStreamFrame(signal);
 
-        const execution = await tools.execute(name, args);
+        const mutationCall = getRepeatGuardedMutationCall(name, args);
+        const repeatedSuccessfulMutation = mutationCall
+          && latestMutationByPath.get(mutationCall.path) === mutationCall.fingerprint;
+        const execution = repeatedSuccessfulMutation
+          ? {
+              ok: true,
+              mutated: false,
+              result: `Panggilan identik untuk ${mutationCall.path} sudah berhasil pada versi file saat ini; tidak dijalankan ulang. Lanjutkan perubahan berikutnya atau selesaikan.`,
+              artifacts: [],
+            }
+          : await tools.execute(name, args);
         const { result, artifacts = [] } = execution;
         const toolOk = execution.ok !== false;
         const toolMutated = Boolean(execution.mutated);
+        if (toolOk && toolMutated && mutationCall) {
+          latestMutationByPath.set(mutationCall.path, mutationCall.fingerprint);
+        }
         if (toolOk) successfulToolCount++;
         if (toolOk && toolMutated) successfulMutationCount++;
         if (toolOk && toolMutated && FILE_MUTATION_TOOLS.has(name)) successfulFileMutationCount++;
         if (name === "write_file") {
+          if (!writePreparation && writeActivity) {
+            const remaining = MIN_FRAME_ACTIVITY_MS - (Date.now() - writeActivity.startedAt);
+            if (remaining > 0) await flushStreamFrame(undefined, remaining);
+            emit({
+              type: "frame_working_clear",
+              callIndex,
+              frameId: writeActivity.frameId,
+              path: writeActivity.path,
+            });
+            if (preparedFrameActivity === writeActivity) preparedFrameActivity = null;
+          } else if (!writePreparation && preparedFrameActivity?.operation === "write_file") {
+            clearPreparedFrameActivity();
+          } else if (writePreparation && !toolOk) {
+            const streamedActivity = writeActivities.get(callIndex);
+            if (streamedActivity && streamedActivity !== preparedFrameActivity) {
+              emit({
+                type: "frame_working_clear",
+                callIndex,
+                frameId: streamedActivity.frameId,
+                path: streamedActivity.path,
+              });
+            }
+          }
           const draft = extractWriteFileDraft(args);
           if (draft) emit({ type: "preview_draft_clear", path: draft.path });
         }
-        // edit_file: clear the drafting overlay once the edit is applied.
         if (name === "edit_file") {
-          const editedPath = extractEditFileDraftPath(args);
-          if (editedPath) emit({ type: "frame_working_clear", path: editedPath });
+          if (!editPreparation && editActivity) {
+            const remaining = MIN_FRAME_ACTIVITY_MS - (Date.now() - editActivity.startedAt);
+            if (remaining > 0) await flushStreamFrame(undefined, remaining);
+            emit({
+              type: "frame_working_clear",
+              callIndex,
+              frameId: editActivity.frameId,
+              path: editActivity.path,
+            });
+            if (preparedFrameActivity === editActivity) preparedFrameActivity = null;
+          } else if (!editPreparation && preparedFrameActivity?.operation === "edit_file") {
+            clearPreparedFrameActivity();
+          } else if (editPreparation && !toolOk) {
+            const streamedActivity = editActivities.get(callIndex);
+            if (streamedActivity && streamedActivity !== preparedFrameActivity) {
+              emit({
+                type: "frame_working_clear",
+                callIndex,
+                frameId: streamedActivity.frameId,
+                path: streamedActivity.path,
+              });
+            }
+          }
         }
         const toolMessage = {
           role: "tool",
@@ -642,6 +926,7 @@ export async function runAgent({ session, store, prompt, images = [], attachment
     }
     throw new Error(`Agent mencapai batas ${config.maxIterations} iterasi`);
   } catch (error) {
+    clearPreparedFrameActivity();
     await store.update(session.id, { status: "error" });
     // Attach context for the error log (picked up by streamChat).
     error._aiContext = {
@@ -672,6 +957,104 @@ export function isolateCreateFrameToolCall(message) {
   };
 }
 
+export function isolateExclusiveSetupToolCall(message) {
+  const createFrameIsolation = isolateCreateFrameToolCall(message);
+  if (createFrameIsolation.changed) {
+    return { ...createFrameIsolation, exclusiveName: "create_frame" };
+  }
+  const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+  const prepareFrameCall = calls.find((call) =>
+    (call.function?.name === "write_file" && isWriteFilePreparationArguments(call.function?.arguments || ""))
+    || (call.function?.name === "edit_file" && isEditFilePreparationArguments(call.function?.arguments || ""))
+  );
+  if (!prepareFrameCall || calls.length === 1) {
+    return { changed: false, message, dropped: 0, droppedCalls: [], originalCalls: calls, exclusiveName: null };
+  }
+  const droppedCalls = calls.filter((call) => call !== prepareFrameCall);
+  return {
+    changed: true,
+    exclusiveName: `${prepareFrameCall.function.name} preparation`,
+    dropped: droppedCalls.length,
+    droppedCalls,
+    originalCalls: calls,
+    message: { ...message, tool_calls: [prepareFrameCall] },
+  };
+}
+
+function isWriteFilePreparationArguments(rawArguments) {
+  try {
+    const args = JSON.parse(rawArguments || "{}");
+    return args && typeof args === "object" && !Object.hasOwn(args, "content");
+  } catch {
+    return false;
+  }
+}
+
+function isEditFilePreparationArguments(rawArguments) {
+  try {
+    const args = JSON.parse(rawArguments || "{}");
+    return args
+      && typeof args === "object"
+      && !Object.hasOwn(args, "old_string")
+      && !Object.hasOwn(args, "new_string");
+  } catch {
+    return false;
+  }
+}
+
+export function detectToolArgumentOrderViolation(name, rawArguments) {
+  const pathIndex = findJsonPropertyIndex(rawArguments, "path");
+  const payloadKeys = name === "write_file"
+    ? ["content"]
+    : name === "edit_file"
+      ? ["old_string", "new_string", "replace_all"]
+      : [];
+  for (const payloadKey of payloadKeys) {
+    const payloadIndex = findJsonPropertyIndex(rawArguments, payloadKey);
+    if (payloadIndex >= 0 && (pathIndex < 0 || payloadIndex < pathIndex)) {
+      return { payloadKey };
+    }
+  }
+  return null;
+}
+
+function findJsonPropertyIndex(source, key) {
+  const match = new RegExp(`(?:^|[,{])\\s*"${key}"\\s*:`).exec(String(source || ""));
+  return match?.index ?? -1;
+}
+
+function buildToolArgumentOrderRetryPrompt({ name, payloadKey }) {
+  const example = name === "write_file"
+    ? '{"frame_id":"...","path":"index.html","content":"..."}'
+    : '{"frame_id":"...","path":"index.html","old_string":"...","new_string":"..."}';
+  return `Sistem: call ${name} lengkap tepat sebelum pesan ini dibatalkan tanpa dieksekusi karena parameter ${payloadKey} muncul sebelum path. Ulangi tujuan dan isi call yang dibatalkan itu, dengan urutan persis seperti ${example}. Jangan menyalin atau mengulang call sukses yang lebih lama. Jika runtime menyatakan frame sudah PREPARED, langsung kirim argumen mutasi lengkap dan jangan ulangi tahap persiapan.`;
+}
+
+function getRepeatGuardedMutationCall(name, rawArguments) {
+  if (!REPEAT_GUARDED_MUTATION_TOOLS.has(name)) return null;
+  try {
+    const args = JSON.parse(rawArguments || "{}");
+    const path = typeof args?.path === "string" ? args.path : "";
+    if (!path) return null;
+    return {
+      path,
+      fingerprint: `${name}\n${stableToolJson(args)}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stableToolJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableToolJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableToolJson(value[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function presentToolResult(name, result) {
   if (result.startsWith("Error:")) return summarize(result);
   if (name === "read_file") return "File berhasil dibaca";
@@ -686,7 +1069,7 @@ function emptyUsage() {
   };
 }
 
-async function flushStreamFrame(signal) {
+async function flushStreamFrame(signal, delay = 50) {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   await new Promise((resolve, reject) => {
     const onAbort = () => {
@@ -697,8 +1080,23 @@ async function flushStreamFrame(signal) {
     setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
       resolve();
-    }, 50);
+    }, delay);
   });
+}
+
+/** Resolve a write_file preview target from partial JSON, preferring frame_id over path. */
+export function extractWriteFileTarget(rawArguments, framesById = new Map()) {
+  const frameId = extractJsonStringPrefix(rawArguments, "frame_id");
+  const path = extractJsonStringPrefix(rawArguments, "path");
+  const explicitFrameId = frameId?.complete ? frameId.value.trim() : "";
+  const explicitPath = path?.complete && isPreviewableDraftPath(path.value) ? path.value : "";
+  const frames = framesById instanceof Map ? [...framesById.values()] : Array.isArray(framesById) ? framesById : [];
+  const frame = explicitFrameId
+    ? (framesById instanceof Map ? framesById.get(explicitFrameId) : frames.find((item) => item.id === explicitFrameId))
+    : frames.find((item) => item.file === explicitPath);
+  if (frame?.id) return { frameId: frame.id, path: frame.file || explicitPath || undefined };
+  if (explicitPath) return { frameId: explicitFrameId || undefined, path: explicitPath };
+  return null;
 }
 
 export function extractWriteFileDraft(rawArguments) {
