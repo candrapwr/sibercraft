@@ -777,16 +777,15 @@ function toPublicUser(user) {
 
 async function streamChat(request, response, id, access) {
   const body = await readJson(request, 16_000_000);
-  const existingRun = activeRuns.get(id);
-  if (existingRun) {
-    const supersedesRun = typeof body.supersedesRunId === "string"
-      && body.supersedesRunId === existingRun.runId;
-    if (supersedesRun) existingRun.controller.abort();
-    if (!supersedesRun && !existingRun.controller.signal.aborted && !existingRun.finishing) {
-      throw new HttpError(409, "AI masih bekerja pada sesi ini");
+  while (activeRuns.has(id)) {
+    const previousRun = activeRuns.get(id);
+    if (!previousRun) {
+      activeRuns.delete(id);
+      break;
     }
-    await existingRun.finished;
-    if (activeRuns.has(id)) throw new HttpError(409, "AI masih bekerja pada sesi ini");
+    previousRun.superseded = true;
+    previousRun.controller.abort();
+    await previousRun.finished;
   }
   const runId = typeof body.runId === "string" && body.runId.length <= 100 ? body.runId : null;
   const imagePayloads = parseImagePayloads(body.images);
@@ -800,7 +799,6 @@ async function streamChat(request, response, id, access) {
   if (imagePayloads.length && !(config.deepseek.multimodal.apiKey && config.deepseek.multimodal.model)) {
     throw new HttpError(400, "Model multimodal belum dikonfigurasi");
   }
-  const history = await store.history(id);
   const attachmentsByPath = new Map(uploadedFiles.map((file) => [file.path, file]));
   const images = [];
   for (const image of imagePayloads) {
@@ -818,9 +816,28 @@ async function streamChat(request, response, id, access) {
   }
   const attachments = [...attachmentsByPath.values()];
   if (attachments.length > 10) throw new HttpError(400, "Maksimal 10 file per turn");
-  const checkpoint = isConversationalPrompt(prompt)
-    ? null
-    : await store.createCheckpoint(id, history.length);
+  // Serialize startup too: another chat can arrive while history/checkpoint
+  // storage is awaiting disk I/O. If so, replace it and prepare from fresh history.
+  let history;
+  let checkpoint = null;
+  while (true) {
+    while (activeRuns.has(id)) {
+      const previousRun = activeRuns.get(id);
+      if (!previousRun) {
+        activeRuns.delete(id);
+        break;
+      }
+      previousRun.superseded = true;
+      previousRun.controller.abort();
+      await previousRun.finished;
+    }
+    history = await store.history(id);
+    checkpoint = isConversationalPrompt(prompt)
+      ? null
+      : await store.createCheckpoint(id, history.length);
+    if (!activeRuns.has(id)) break;
+    if (checkpoint) await store.discardCheckpoint(id, checkpoint);
+  }
 
   response.writeHead(200, {
     "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -834,6 +851,7 @@ async function streamChat(request, response, id, access) {
     controller,
     runId,
     intentional: false,
+    superseded: false,
     finishing: false,
     finished: new Promise((resolve) => { finishRun = resolve; }),
   };
@@ -907,9 +925,8 @@ async function streamChat(request, response, id, access) {
       }
     }
     const run = activeRuns.get(id);
-    // intentional=true means the user clicked Stop; an abort without it is a
-    // network disconnect, which is a real failure worth logging.
-    const intentionalStop = isAbort && Boolean(run?.intentional);
+    // User stops and newer prompts are expected cancellations, not failures.
+    const intentionalStop = isAbort && Boolean(run?.intentional || run?.superseded);
     const message = isAbort ? "Proses dihentikan" : error.message;
     emit({ type: "error", message });
     // Log every failure except a deliberate Stop (best-effort, never throws).

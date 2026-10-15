@@ -2205,14 +2205,8 @@ async function sendPrompt(event) {
   if (images.length && !state.config?.multimodalConfigured) return notify(t("multimodalUnavailable"), true);
 
   const sessionId = state.session.id;
-  const recoveryKey = `sibercraft:pending-run:${sessionId}`;
   const runId = crypto.randomUUID();
-  let supersedesRunId = null;
-  try {
-    supersedesRunId = sessionStorage.getItem(recoveryKey) || null;
-    sessionStorage.setItem(recoveryKey, runId);
-  } catch {}
-  activeClientRun = { sessionId, runId, recoveryKey };
+  activeClientRun = { sessionId, runId };
   state.running = true;
   stopRequested = false;
   followLatestMessage = true;
@@ -2246,10 +2240,9 @@ async function sendPrompt(event) {
     const response = await fetch(`/api/sessions/${sessionId}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images, uploads, runId, supersedesRunId }),
+      body: JSON.stringify({ prompt, images, uploads, runId }),
     });
     if (!response.ok) {
-      try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
       throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
     }
     await readNdjson(response.body, (eventData) => {
@@ -2357,7 +2350,6 @@ async function sendPrompt(event) {
         throw new Error(eventData.message);
       }
     });
-    try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
     flushBufferedContent();
     finalizeAssistantTurn();
     setWorkspaceStatus("ready", "statusReady");
@@ -2372,12 +2364,9 @@ async function sendPrompt(event) {
           method: "POST",
           body: { runId, networkCleanup: true },
         });
-        if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey);
       } catch {
-        // Keep the run ID so the next prompt can stop this orphaned run.
+        // The next chat request replaces any run still active in this session.
       }
-    } else {
-      try { if (sessionStorage.getItem(recoveryKey) === runId) sessionStorage.removeItem(recoveryKey); } catch {}
     }
     flushBufferedContent();
     setContextStatus("");
@@ -2481,9 +2470,6 @@ async function stopAgent() {
       method: "POST",
       ...(run ? { body: { runId: run.runId } } : {}),
     });
-    if (run) {
-      try { if (sessionStorage.getItem(run.recoveryKey) === run.runId) sessionStorage.removeItem(run.recoveryKey); } catch {}
-    }
   }
   catch (error) {
     stopRequested = false;
