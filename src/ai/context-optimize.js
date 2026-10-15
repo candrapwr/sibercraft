@@ -8,6 +8,221 @@ const PAYLOAD_FIELDS = new Set([
 
 const MAX_SIGNATURE_ARGS = 3;
 
+/**
+ * Remove older complete tool-call/result pairs when the same tool is called
+ * again with semantically identical arguments and no intervening workspace
+ * mutation. The stored history is never changed; callers receive a sanitized
+ * copy for provider payloads and optimized-history snapshots.
+ *
+ * A pair is removed atomically by call id. In multi-call assistant messages,
+ * unrelated calls and their results remain intact. The newest result also gets
+ * a compact outcome note so successful or mutating older attempts are not lost.
+ */
+export function deduplicateToolHistory(messages) {
+  const source = Array.isArray(messages) ? messages : [];
+  const removedCallIds = new Set();
+  const retainedInfo = new Map();
+  const seen = new Map();
+
+  for (let index = 0; index < source.length; index++) {
+    const message = source[index];
+    if (message?.role === "user" || message?.role === "system") {
+      seen.clear();
+      continue;
+    }
+    if (message?.role !== "assistant") continue;
+
+    const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    if (!calls.length) {
+      // A normal assistant response closes the tool-work sequence. Identical
+      // reads in a later user turn remain available as fresh evidence.
+      seen.clear();
+      continue;
+    }
+
+    const resultByCallId = new Map();
+    let resultIndex = index + 1;
+    while (resultIndex < source.length && source[resultIndex]?.role === "tool") {
+      const result = source[resultIndex];
+      if (result.tool_call_id && !resultByCallId.has(result.tool_call_id)) {
+        resultByCallId.set(result.tool_call_id, { message: result, index: resultIndex });
+      }
+      resultIndex++;
+    }
+
+    // Never alter incomplete or ambiguous provider protocol blocks.
+    if (calls.some((call) => !call?.id || !resultByCallId.has(call.id))) {
+      seen.clear();
+      continue;
+    }
+
+    for (const call of calls) {
+      const result = resultByCallId.get(call.id).message;
+      const fingerprint = toolCallFingerprint(call);
+      const previous = seen.get(fingerprint);
+      const inherited = previous?.omitted || emptyDedupeOutcomes();
+
+      if (previous) {
+        removedCallIds.add(previous.callId);
+        const omitted = mergeDedupeOutcomes(inherited, toolResultOutcome(previous.result));
+        retainedInfo.set(call.id, omitted);
+      }
+
+      const outcome = toolResultOutcome(result);
+      // A mutation invalidates earlier read evidence. Keep this call as the new
+      // baseline so an immediately repeated mutation can still be collapsed.
+      if (outcome.mutated) seen.clear();
+      seen.set(fingerprint, {
+        callId: call.id,
+        result,
+        omitted: retainedInfo.get(call.id) || emptyDedupeOutcomes(),
+      });
+    }
+  }
+
+  if (!removedCallIds.size) {
+    return {
+      messages: source.map(cloneMessage),
+      stats: { removedRounds: 0, bytesSaved: 0, valid: hasValidToolProtocol(source) },
+    };
+  }
+
+  let bytesSaved = 0;
+  const sanitized = [];
+  for (const message of source) {
+    if (message?.role === "assistant" && Array.isArray(message.tool_calls)) {
+      const keptCalls = message.tool_calls.filter((call) => !removedCallIds.has(call?.id));
+      const removedCalls = message.tool_calls.filter((call) => removedCallIds.has(call?.id));
+      bytesSaved += removedCalls.reduce(
+        (total, call) => total + JSON.stringify(call).length,
+        0,
+      );
+      if (!keptCalls.length) {
+        if (String(message.content || "").trim()) {
+          const clean = cloneMessage(message);
+          delete clean.tool_calls;
+          sanitized.push(clean);
+        } else {
+          bytesSaved += String(message.content || "").length;
+        }
+        continue;
+      }
+      sanitized.push({ ...message, tool_calls: keptCalls.map(cloneToolCall) });
+      continue;
+    }
+
+    if (message?.role === "tool" && removedCallIds.has(message.tool_call_id)) {
+      bytesSaved += JSON.stringify(message).length;
+      continue;
+    }
+
+    if (message?.role === "tool" && retainedInfo.has(message.tool_call_id)) {
+      const info = retainedInfo.get(message.tool_call_id);
+      sanitized.push({
+        ...message,
+        content: `${renderDedupeNote(info)}\n${String(message.content || "")}`,
+      });
+      continue;
+    }
+
+    sanitized.push(cloneMessage(message));
+  }
+
+  if (!hasValidToolProtocol(sanitized)) {
+    return {
+      messages: source.map(cloneMessage),
+      stats: { removedRounds: 0, bytesSaved: 0, valid: false },
+    };
+  }
+
+  return {
+    messages: sanitized,
+    stats: { removedRounds: removedCallIds.size, bytesSaved, valid: true },
+  };
+}
+
+function toolCallFingerprint(call) {
+  const name = String(call?.function?.name || "tool");
+  const rawArgs = String(call?.function?.arguments || "").trim();
+  try {
+    return `${name}\n${stableJson(JSON.parse(rawArgs || "{}"))}`;
+  } catch {
+    return `${name}\n${rawArgs}`;
+  }
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableJson(value[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function toolResultOutcome(message) {
+  const content = String(message?.content || "");
+  const marker = content.match(/^\[TOOL_STATUS=(SUCCESS|FAILED)(; MUTATED)?\]/);
+  if (marker) {
+    return { status: marker[1], mutated: Boolean(marker[2]) };
+  }
+  return {
+    status: /^Error:/i.test(content.trim()) ? "FAILED" : "SUCCESS",
+    mutated: false,
+  };
+}
+
+function emptyDedupeOutcomes() {
+  return { count: 0, success: 0, failed: 0, mutated: 0 };
+}
+
+function mergeDedupeOutcomes(summary, outcome) {
+  return {
+    count: summary.count + 1,
+    success: summary.success + (outcome.status === "SUCCESS" ? 1 : 0),
+    failed: summary.failed + (outcome.status === "FAILED" ? 1 : 0),
+    mutated: summary.mutated + (outcome.mutated ? 1 : 0),
+  };
+}
+
+function renderDedupeNote(info) {
+  return `[TOOL_HISTORY_DEDUPED omitted=${info.count}; previous_success=${info.success}; previous_failed=${info.failed}; previous_mutated=${info.mutated}; latest complete call/result retained]`;
+}
+
+function cloneMessage(message) {
+  if (!message || typeof message !== "object") return message;
+  const clone = { ...message };
+  if (Array.isArray(message.tool_calls)) clone.tool_calls = message.tool_calls.map(cloneToolCall);
+  return clone;
+}
+
+function cloneToolCall(call) {
+  return {
+    ...call,
+    ...(call?.function ? { function: { ...call.function } } : {}),
+  };
+}
+
+function hasValidToolProtocol(messages) {
+  let pending = null;
+  for (const message of messages) {
+    if (message?.role === "tool") {
+      if (!pending || !pending.has(message.tool_call_id)) return false;
+      pending.delete(message.tool_call_id);
+      continue;
+    }
+    if (pending?.size) return false;
+    pending = null;
+    if (message?.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+      const ids = message.tool_calls.map((call) => call?.id).filter(Boolean);
+      if (ids.length !== message.tool_calls.length || new Set(ids).size !== ids.length) return false;
+      pending = new Set(ids);
+    }
+  }
+  return !pending?.size;
+}
+
 export function renderSignature(name, rawArgs) {
   let args = {};
   try {

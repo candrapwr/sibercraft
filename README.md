@@ -387,6 +387,8 @@ Konfigurasi lainnya (model AI, reasoning effort, screenshot API, optimasi kontek
 
 History asli tetap tersimpan. Saat penggunaan prompt terakhir mencapai ambang context, AI merangkum turn lama secara bertahap sebelum permintaan chat berikutnya dan mempertahankan turn terbaru dalam bentuk penuh. Panggilan AI untuk merangkum memakai model aktif dan tokennya masuk ke usage session. Di bawah chat, meter menampilkan pemakaian context dan ambang ringkas otomatis.
 
+Sebelum setiap request model, pasangan tool call dan tool result lama yang mempunyai nama serta argumen identik juga dideduplikasi dari payload. Pasangan terbaru tetap dikirim, termasuk ringkasan status pasangan yang dihilangkan. Proses ini tidak mengubah `messages.json`; hasil payload yang sudah dibersihkan dapat diperiksa di `messages.optimized.json`.
+
 | Variable | Default | Keterangan |
 |---|---:|---|
 | `CONTEXT_OPTIMIZE` | `true` | Aktif/nonaktifkan optimasi history |

@@ -1,5 +1,5 @@
 import { createFileTools } from "../workspace/file-tools.js";
-import { optimizeContext } from "./context-optimize.js";
+import { deduplicateToolHistory, optimizeContext } from "./context-optimize.js";
 import {
   applyContextSummary,
   estimateMessageTokens,
@@ -279,17 +279,20 @@ export async function runAgent({ session, store, prompt, images = [], attachment
   if (optimizeConfig.mode === "drop" && optimizedBase.stats.bytesSaved > 0) {
     emit({ type: "context_optimized", bytesSaved: optimizedBase.stats.bytesSaved });
   }
+  const optimizedSnapshot = deduplicateToolHistory([...optimizedBase.messages, userMessage]);
   try {
-    await store.saveOptimizedHistory(session.id, [...optimizedBase.messages, userMessage], {
+    await store.saveOptimizedHistory(session.id, optimizedSnapshot.messages, {
       collapsedCount: optimizedBase.stats.collapsedCount,
-      bytesSaved: optimizedBase.stats.bytesSaved,
+      bytesSaved: optimizedBase.stats.bytesSaved + optimizedSnapshot.stats.bytesSaved,
       mode: optimizeConfig.mode,
       summaryUpToIndex: contextSummary?.upToIndex ?? -1,
+      deduplicatedToolRounds: optimizedSnapshot.stats.removedRounds,
     });
   } catch (error) {
     throw attachUsageToError(error);
   }
 
+  let requestDedupeStats = { removedRounds: 0, bytesSaved: 0, valid: true };
   const requestBase = () => {
     const base = [...optimizedBase.messages.map(toModelMessage), requestUserMessage, ...requestHistory.map(toModelMessage)];
     if (turnSummary) {
@@ -298,7 +301,9 @@ export async function runAgent({ session, store, prompt, images = [], attachment
         content: `[Current task progress summary]\n${turnSummary}`,
       });
     }
-    return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...base];
+    const deduplicated = deduplicateToolHistory(base);
+    requestDedupeStats = deduplicated.stats;
+    return [{ role: "system", content: conversational ? CONVERSATION_PROMPT : SYSTEM_PROMPT }, ...deduplicated.messages];
   };
   let finalText = "";
   let usage = null;
@@ -407,6 +412,8 @@ export async function runAgent({ session, store, prompt, images = [], attachment
             collapsedCount: optimizedBase.stats.collapsedCount,
             bytesSaved: optimizedBase.stats.bytesSaved,
             summaryUpToIndex: contextSummary?.upToIndex ?? -1,
+            deduplicatedToolRounds: requestDedupeStats.removedRounds,
+            deduplicatedBytesSaved: requestDedupeStats.bytesSaved,
           },
           request: {
             model: iterationAi.model,
