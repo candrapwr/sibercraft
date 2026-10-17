@@ -1585,13 +1585,17 @@ function renderSessions() {
 }
 
 /**
- * Render a list of sessions into a grid element.
+ * Render a list of sessions into a grid element. Only the first page of
+ * cards is shown; a "show more" control reveals the rest in increments so
+ * long histories don't flood the landing page.
  * @param grid       The .session-grid container.
  * @param emptyEl    The empty-state element to toggle.
  * @param countEl    The count label element.
  * @param sessions   Sessions to render.
  * @param community  True when rendering the community gallery (controls heading labels).
  */
+const SESSIONS_PAGE_SIZE = 6;
+
 function renderSessionGrid(grid, emptyEl, countEl, sessions, community) {
   if (!grid) return;
   grid.replaceChildren();
@@ -1601,7 +1605,24 @@ function renderSessionGrid(grid, emptyEl, countEl, sessions, community) {
   }
   if (emptyEl) emptyEl.hidden = sessions.length > 0;
   grid.hidden = sessions.length === 0;
-  for (const session of sessions) grid.append(renderSessionCard(session));
+  // Expanded count lives on the grid element so it survives re-renders
+  // (deleting a card must not collapse the list back to one page).
+  const visibleCount = Math.max(Number(grid.dataset.visibleCount) || SESSIONS_PAGE_SIZE, SESSIONS_PAGE_SIZE);
+  const shown = sessions.slice(0, visibleCount);
+  for (const session of shown) grid.append(renderSessionCard(session));
+  const remaining = sessions.length - shown.length;
+  if (remaining > 0) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "session-show-more";
+    more.textContent = t("showMoreSessions", { count: remaining });
+    more.setAttribute("aria-label", t("showMoreSessions", { count: remaining }));
+    more.addEventListener("click", () => {
+      grid.dataset.visibleCount = String(visibleCount + SESSIONS_PAGE_SIZE);
+      renderSessionGrid(grid, emptyEl, countEl, sessions, community);
+    });
+    grid.append(more);
+  }
 }
 
 function renderSessionCard(session) {
