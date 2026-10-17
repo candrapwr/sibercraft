@@ -5,6 +5,7 @@ import { extname, join, resolve } from "node:path";
 import { config } from "./config/config.js";
 import { isConversationalPrompt, runAgent } from "./ai/agent.js";
 import { buildStandaloneHtml, buildFileZip, buildWorkspaceZip } from "./workspace/exporter.js";
+import { buildSessionExport, importSessionArchive } from "./workspace/session-export.js";
 import { HttpError, SessionStore } from "./workspace/session-store.js";
 import { createBackupArchive, stageBackupArchive, replaceDataDirectory } from "./workspace/backup.js";
 import { resolveWithin } from "./workspace/path-sandbox.js";
@@ -317,6 +318,27 @@ async function handleApi(request, response, url, user) {
     return sendJson(response, 201, session);
   }
 
+  // Import session penuh dari arsip ZIP export. Hanya user yang sudah login —
+  // sesi hasil import selalu menjadi milik user pengimpor (owner di arsip
+  // diabaikan), dengan id session baru.
+  if (method === "POST" && url.pathname === "/api/sessions/import") {
+    requireUser(user);
+    const buffer = await readRawBody(request, 250 * 1024 * 1024);
+    try {
+      const session = await importSessionArchive({
+        buffer,
+        store,
+        ownerId: user.id,
+        defaultModel: config.deepseek.model,
+        fallbackName: url.searchParams.get("name") || "",
+      });
+      return sendJson(response, 201, session);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(400, `Import gagal: ${error.message}`);
+    }
+  }
+
   const match = url.pathname.match(/^\/api\/sessions\/([0-9a-f-]{36})(?:\/(.+))?$/i);
   if (!match) throw new HttpError(404, "Endpoint tidak ditemukan");
   const [, id, action = ""] = match;
@@ -405,7 +427,40 @@ async function handleApi(request, response, url, user) {
     response.end(zip);
     return;
   }
-  // Export the ENTIRE workspace (all files + per-frame screenshots) as a ZIP.
+  // Export SATU SESSION PENUH sebagai SATU zip: file workspace di root (jadi
+  // sekaligus paket aset) + screenshot per frame + manifest + history chat.
+  // File inilah yang bisa di-impor user lain lewat /api/sessions/import.
+  if (method === "GET" && action === "export/session") {
+    if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
+    const session = await store.getForView(id, access);
+    const messages = await store.history(id);
+    // Screenshot per frame (best-effort; dilewati bila Chrome tidak ada).
+    const screenshots = [];
+    for (const frame of Array.isArray(session.frames) ? session.frames : []) {
+      const file = normalizeDraftPath(frame.file || "") || "index.html";
+      const width = Math.min(2560, Math.max(320, (frame.w) || 1280));
+      const previewUrl = `http://127.0.0.1:${config.port}/preview/${id}/${encodeURIComponent(file)}?export=${Date.now()}`;
+      try {
+        const image = await captureFullPage({ url: previewUrl, width });
+        const base = file.replace(/\.html?$/i, "");
+        screenshots.push({ path: `${base || "preview"}.png`, data: image });
+      } catch {
+        // screenshot unavailable (no headless browser) — skip silently
+      }
+    }
+    const zip = await buildSessionExport({ store, session, messages, screenshots });
+    response.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${safeFilename(session.name)}.zip"`,
+      "Content-Length": zip.length,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(zip);
+    return;
+  }
+  // Legacy assets-only export (tanpa history, file di root). Disimpan untuk
+  // kompatibilitas; tombol UI sekarang memakai export/session di atas.
   if (method === "GET" && action === "export/zip-all") {
     if (activeRuns.has(id)) throw new HttpError(409, "Tunggu proses AI selesai sebelum export");
     const session = await store.getForView(id, access);
@@ -857,6 +912,19 @@ async function streamChat(request, response, id, access) {
   };
   activeRuns.set(id, run);
   let finished = false;
+  // Heartbeat while the run is active: long provider calls with no streamed
+  // content would otherwise leave the NDJSON response idle for minutes, which
+  // proxies and flaky links read as a dead connection (surfacing as spurious
+  // "Network" errors). The frontend ignores unknown event types like "ping".
+  const heartbeat = setInterval(() => {
+    if (finished || response.destroyed) return;
+    try {
+      response.write(`${JSON.stringify({ type: "ping" })}\n`);
+    } catch {
+      // Connection already gone; response.on("close") handles the abort.
+    }
+  }, 15_000);
+  heartbeat.unref?.();
   const emit = (event) => {
     let publicEvent = event;
     if (event.type === "preview_draft") {
@@ -953,6 +1021,7 @@ async function streamChat(request, response, id, access) {
     }
   } finally {
     finished = true;
+    clearInterval(heartbeat);
     run.finishing = true;
     previewDrafts.delete(id);
     response.end();

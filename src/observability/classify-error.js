@@ -7,7 +7,7 @@
  * importing server.js (which starts the HTTP server on load).
  *
  * @param {Error|null|undefined} error
- * @returns {"HTTP"|"Server"|"Network"|"AbortError"|"Config"|"MaxIterations"|"Unknown"}
+ * @returns {"HTTP"|"Server"|"Network"|"AbortError"|"Config"|"MaxIterations"|"LoopGuard"|"Unknown"}
  */
 export function classifyError(error) {
   if (error?.errorType) return error.errorType; // "Server" | "HTTP" (set by deepseek.js)
@@ -19,5 +19,6 @@ export function classifyError(error) {
   if (name === "TypeError") return "Network"; // fetch() failures (DNS, offline, timeout)
   if (/belum dikonfigurasi/i.test(msg)) return "Config";
   if (/mencapai batas .* iterasi/i.test(msg)) return "MaxIterations";
+  if (/terjebak mengulang/i.test(msg)) return "LoopGuard";
   return "Unknown";
 }

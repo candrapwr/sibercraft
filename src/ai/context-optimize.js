@@ -223,6 +223,178 @@ function hasValidToolProtocol(messages) {
   return !pending?.size;
 }
 
+/**
+ * Deterministically fold old tool work so the turns kept verbatim by the
+ * summary-mode compaction stay within a character budget.
+ *
+ * applyContextSummary collapses everything before its boundary, but the turns
+ * kept after it can alone exceed the context window when one turn ran dozens
+ * of tool iterations (observed: a single turn of ~180k estimated tokens).
+ * This folds those kept turns — oldest first — into the same per-turn
+ * [SUMMARY] digest format the system prompt already documents. The stored
+ * history is never modified; only the provider payload view changes.
+ *
+ * Budget semantics: `budgetChars` is compared against the total rendered
+ * chars (content + tool-call arguments). When over budget:
+ *   1. every complete turn except the most recent one is folded to a digest;
+ *   2. if still over budget, the most recent turn's leading tool rounds are
+ *      folded too, keeping the last `keepRecentRounds` rounds verbatim and
+ *      clipping oversized tool results in what remains.
+ */
+export function foldKeptTurnsForBudget(messages, { budgetChars = Infinity, keepRecentRounds = 2, maxToolResultChars = 24_000 } = {}) {
+  const source = Array.isArray(messages) ? messages : [];
+  const stats = { foldedTurns: 0, clippedResults: 0, charsSaved: 0 };
+  const limit = Number(budgetChars);
+  if (!Number.isFinite(limit) || totalMessageChars(source) <= limit) {
+    return { messages: source, stats };
+  }
+
+  const turnStarts = [];
+  for (let index = 0; index < source.length; index++) {
+    if (source[index]?.role === "user") turnStarts.push(index);
+  }
+  if (!turnStarts.length) return { messages: source, stats };
+
+  // Segment bounds: a leading partial segment (before the first user message)
+  // plus one segment per user turn.
+  const bounds = [];
+  if (turnStarts[0] > 0) bounds.push({ start: 0, end: turnStarts[0], complete: false });
+  for (let index = 0; index < turnStarts.length; index++) {
+    bounds.push({
+      start: turnStarts[index],
+      end: index + 1 < turnStarts.length ? turnStarts[index + 1] : source.length,
+      complete: true,
+    });
+  }
+  const completeTurnIndexes = bounds
+    .map((bound, index) => (bound.complete ? index : -1))
+    .filter((index) => index >= 0);
+
+  const foldedBySegment = new Map();
+  let chars = totalMessageChars(source);
+
+  // 1) Fold older complete turns, oldest first, until back under budget.
+  for (const segmentIndex of completeTurnIndexes.slice(0, -1)) {
+    if (chars <= limit) break;
+    const bound = bounds[segmentIndex];
+    const folded = foldTurnSegment(source.slice(bound.start, bound.end));
+    if (!folded) continue;
+    chars -= folded.charsSaved;
+    foldedBySegment.set(segmentIndex, folded.messages);
+    stats.foldedTurns++;
+  }
+
+  // 2) Still over budget: partially fold the most recent turn itself.
+  if (chars > limit && completeTurnIndexes.length) {
+    const segmentIndex = completeTurnIndexes[completeTurnIndexes.length - 1];
+    const bound = bounds[segmentIndex];
+    const partial = foldTurnLeadingRounds(source.slice(bound.start, bound.end), { keepRecentRounds, maxToolResultChars });
+    if (partial) {
+      foldedBySegment.set(segmentIndex, partial.messages);
+      stats.clippedResults += partial.clippedResults;
+      stats.foldedTurns++;
+    }
+  }
+
+  if (!foldedBySegment.size) return { messages: source, stats };
+
+  const output = [];
+  for (let index = 0; index < bounds.length; index++) {
+    const bound = bounds[index];
+    if (foldedBySegment.has(index)) {
+      output.push(...foldedBySegment.get(index));
+    } else {
+      output.push(...source.slice(bound.start, bound.end));
+    }
+  }
+  stats.charsSaved = Math.max(0, totalMessageChars(source) - totalMessageChars(output));
+  return { messages: output, stats };
+}
+
+/** Fold one complete turn (user message + tool work + final text) into a digest. */
+function foldTurnSegment(segment) {
+  const head = segment[0];
+  if (head?.role !== "user" || typeof head.content !== "string") return null;
+  const actions = [];
+  const kept = [];
+  for (const message of segment.slice(1)) {
+    if (message?.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+      for (const call of message.tool_calls) {
+        actions.push({
+          id: call.id,
+          signature: renderSignature(call.function?.name || "tool", call.function?.arguments || ""),
+          status: "NOT_EXECUTED",
+          result: "",
+        });
+      }
+      continue;
+    }
+    if (message?.role === "tool") {
+      const parsed = parseToolStatus(message.content);
+      const action = actions.find((candidate) => candidate.id === message.tool_call_id && candidate.status === "NOT_EXECUTED");
+      if (action) {
+        action.status = parsed.status;
+        action.result = parsed.result;
+      } else {
+        actions.push({ id: message.tool_call_id, signature: message.name || "tool", status: parsed.status, result: parsed.result });
+      }
+      continue;
+    }
+    if (message?.role === "assistant") {
+      if (String(message.content || "").trim()) kept.push({ ...message, content: message.content });
+      continue;
+    }
+    kept.push(message);
+  }
+  if (!actions.length) return null;
+  const digest = actions.map(renderActionSummary).join("\n");
+  const charsSaved = totalMessageChars(segment) - totalMessageChars([{ ...head, content: `${head.content} ${digest}` }, ...kept]);
+  if (charsSaved <= 0) return null;
+  return {
+    messages: [{ ...head, content: `${head.content}\n\n[SUMMARY]\n${digest}` }, ...kept],
+    charsSaved,
+  };
+}
+
+/** Fold only the leading tool rounds of a turn, keeping the recent rounds verbatim. */
+function foldTurnLeadingRounds(segment, { keepRecentRounds, maxToolResultChars }) {
+  const roundIndexes = [];
+  for (let index = 0; index < segment.length; index++) {
+    const message = segment[index];
+    if (message?.role === "assistant" && Array.isArray(message.tool_calls) && message.tool_calls.length) roundIndexes.push(index);
+  }
+  const keep = Math.max(1, Math.floor(Number(keepRecentRounds) || 0));
+  if (roundIndexes.length <= keep) return null;
+  const retainedStart = roundIndexes[roundIndexes.length - keep];
+  const foldedPrefix = foldTurnSegment(segment.slice(0, retainedStart));
+  if (!foldedPrefix) return null;
+
+  let clippedResults = 0;
+  const suffix = segment.slice(retainedStart).map((message) => {
+    if (message?.role === "tool" && typeof message.content === "string" && message.content.length > maxToolResultChars) {
+      clippedResults++;
+      return {
+        ...message,
+        content: `${message.content.slice(0, maxToolResultChars)}\n…[hasil dipotong ${message.content.length - maxToolResultChars} karakter; bila bagian akhir diperlukan, panggil ulang dengan offset/limit]`,
+      };
+    }
+    return message;
+  });
+  return { messages: [...foldedPrefix.messages, ...suffix], clippedResults };
+}
+
+function totalMessageChars(messages) {
+  let total = 0;
+  for (const message of messages) {
+    total += typeof message?.content === "string" ? message.content.length : 0;
+    total += (message?.tool_calls || []).reduce(
+      (sum, call) => sum + (call?.function?.arguments?.length || 0),
+      0,
+    );
+  }
+  return total;
+}
+
 export function renderSignature(name, rawArgs) {
   let args = {};
   try {

@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import { Script } from "node:vm";
 import { resolveWithin } from "./path-sandbox.js";
 import { captureWebpageScreenshot } from "../media/web-screenshot.js";
 import { executeWebSearch } from "../ai/web-search.js";
@@ -78,7 +79,13 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
         return scannedFiles > 0 ? `(tidak ada match di ${scannedFiles} file)` : "(tidak ada file untuk dicari)";
       }
       const suffix = results.length >= limit ? `\n…(dibatasi ${limit} hasil, mungkin masih ada)` : "";
-      return `${results.join("\n")}${suffix}`;
+      const output = `${results.join("\n")}${suffix}`;
+      // Cap total output so a broad pattern over a big workspace cannot flood
+      // the agent context (200 lines x 300 chars could reach ~60 KB before).
+      if (output.length > GREP_MAX_OUTPUT_CHARS) {
+        return `${output.slice(0, GREP_MAX_OUTPUT_CHARS)}\n…(hasil dipotong ${output.length - GREP_MAX_OUTPUT_CHARS} karakter; persempit pattern atau tentukan path file yang lebih spesifik)`;
+      }
+      return output;
     }),
     ...(options.webSearch?.enabled ? [
       tool("web_search", "Search the web and read page content through the Siber Exa-compatible API. Use mode \"search\" with a query to find current information and source URLs (up to 5 results). Use mode \"content\" with a URL from the search results or the user to retrieve readable page text. Search returns titles, URLs, publication dates, authors, and highlights; content returns the page title, URL, and text.", {
@@ -114,6 +121,117 @@ export function createFileTools(workspaceDir, onMutation = () => {}, options = {
         }),
       })),
     ] : []),
+    tool("check_code", "Verify workspace code for syntax errors without executing it. Checks JavaScript (standalone .js/.mjs files and inline <script> blocks in HTML), CSS brace balance (standalone .css and inline <style>), and JSON validity. Returns a list of issues with file:line, or a pass summary. Use this after finishing JavaScript-heavy changes and fix anything it reports before claiming completion.", {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Relative file to check (.html, .js, .mjs, .css, or .json). Omit to check every code file in the workspace.",
+        },
+      },
+      additionalProperties: false,
+    }, async ({ path } = {}) => {
+      const issues = [];
+      let checkedFiles = 0;
+      let checkedScripts = 0;
+
+      const vmErrorLine = (error) => {
+        const match = /^([^\n(]+?):(\d+)\s*$/m.exec(String(error.stack || ""));
+        return match ? Number(match[2]) : 0;
+      };
+      const checkJsBlock = (label, code, startLine) => {
+        checkedScripts++;
+        try {
+          new Script(code, { filename: label });
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          // Browser ESM (import/export) cannot compile as a classic script;
+          // report it as unvalidated instead of a false syntax error.
+          if (/\b(import|export)\b/i.test(error.message)) {
+            issues.push(`${label}: ES-module (import/export) tidak divalidasi sebagai skrip klasik`);
+            return;
+          }
+          const relativeLine = vmErrorLine(error);
+          issues.push(`${label}:${startLine + Math.max(relativeLine - 1, 0)}: ${error.message}`);
+        }
+      };
+      const checkCssBlock = (label, css, startLine) => {
+        const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+        let depth = 0;
+        let line = startLine;
+        for (const char of withoutComments) {
+          if (char === "\n") line++;
+          else if (char === "{") depth++;
+          else if (char === "}") {
+            depth--;
+            if (depth < 0) {
+              issues.push(`${label}:${line}: kurung "}" tanpa "{" pembuka`);
+              depth = 0;
+            }
+          }
+        }
+        if (depth > 0) issues.push(`${label}:${line}: ${depth} kurung "{" belum ditutup`);
+      };
+      const checkFile = async (relPath, content) => {
+        checkedFiles++;
+        if (/\.html?$/i.test(relPath)) {
+          const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+          for (let match = scriptRe.exec(content); match; match = scriptRe.exec(content)) {
+            const [ , attrs, code ] = match;
+            if (/\bsrc\s*=/i.test(attrs)) continue;
+            const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attrs)?.[1]?.toLowerCase() || "";
+            if (type && !/^(module|text\/javascript|application\/javascript|application\/ecmascript|text\/ecmascript)$/.test(type)) continue;
+            const startLine = countLinesBefore(content, match.index) + 1;
+            checkJsBlock(`${relPath}#script@${startLine}`, code, startLine);
+          }
+          const styleRe = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+          for (let match = styleRe.exec(content); match; match = styleRe.exec(content)) {
+            const startLine = countLinesBefore(content, match.index) + 1;
+            checkCssBlock(`${relPath}#style@${startLine}`, match[1], startLine);
+          }
+          return;
+        }
+        if (/\.(?:js|mjs)$/i.test(relPath)) {
+          checkJsBlock(relPath, content, 1);
+          return;
+        }
+        if (/\.css$/i.test(relPath)) {
+          checkCssBlock(relPath, content, 1);
+          return;
+        }
+        if (/\.json$/i.test(relPath)) {
+          try {
+            JSON.parse(content);
+          } catch (error) {
+            issues.push(`${relPath}:0: JSON tidak valid: ${error.message}`);
+          }
+        }
+      };
+
+      if (path) {
+        const fullPath = await resolveWithin(workspaceDir, path);
+        const info = await stat(fullPath).catch(() => null);
+        if (!info?.isFile()) return { result: `Error: file ${path} tidak ditemukan` };
+        if (info.size > 2_000_000) return { result: `Error: file ${path} terlalu besar untuk diperiksa` };
+        await checkFile(relative(workspaceDir, fullPath).split("\\").join("/"), await readFile(fullPath, "utf8"));
+      } else {
+        const targets = [];
+        await collectCodeFiles(workspaceDir, targets);
+        for (const relPath of targets) {
+          await checkFile(relPath, await readFile(join(workspaceDir, relPath), "utf8"));
+        }
+      }
+
+      if (!issues.length) {
+        return checkedScripts > 0
+          ? `(lolos verifikasi: ${checkedFiles} file, ${checkedScripts} blok skrip diperiksa, tidak ada error sintaks)`
+          : `(lolos verifikasi: ${checkedFiles} file diperiksa, tidak ada error)`;
+      }
+      const output = issues.slice(0, 200).join("\n");
+      const suffix = issues.length > 200 ? `\n…(ditampilkan 200 dari ${issues.length} masalah)` : "";
+      const clipped = output.length > 30_000 ? `${output.slice(0, 30_000)}\n…(dipotong)` : output;
+      return `${clipped}${suffix}`;
+    }),
     tool("read_file", "Read a UTF-8 text file from the workspace. Use this before editing an existing file.", {
       type: "object",
       properties: {
@@ -440,6 +558,43 @@ async function assertMissing(fullPath, requestedPath) {
 // Max file size we'll grep into; larger files are likely binary/minified and
 // would blow up memory/time on a per-line scan.
 const GREP_MAX_FILE_BYTES = 1_000_000;
+// Max characters a single grep result may return to the agent.
+const GREP_MAX_OUTPUT_CHARS = 30_000;
+// Extensions check_code walks (JS/CSS/JSON/HTML).
+const CHECK_CODE_EXT = /\.(?:html?|js|mjs|css|json)$/i;
+
+function countLinesBefore(source, index) {
+  let lines = 0;
+  for (let i = 0; i < index; i++) {
+    if (source[i] === "\n") lines++;
+  }
+  return lines;
+}
+
+/** Recursively collect relative paths of code files for check_code (skips dotfiles). */
+async function collectCodeFiles(dir, out, root = dir) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectCodeFiles(fullPath, out, root);
+    } else if (entry.isFile() && CHECK_CODE_EXT.test(entry.name)) {
+      let info;
+      try {
+        info = await stat(fullPath);
+      } catch {
+        continue;
+      }
+      if (info.size <= 2_000_000) out.push(relative(root, fullPath).split("\\").join("/"));
+    }
+  }
+}
 // Extensions treated as text. Anything else is skipped to avoid dumping
 // matches out of base64 images, fonts, etc.
 const GREP_TEXT_EXT = /\.(?:html?|css|js|mjs|cjs|ts|jsx|tsx|json|svg|md|txt|csv|xml|yml|yaml|webmanifest|ini|env|gitignore)$/i;

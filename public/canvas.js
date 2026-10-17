@@ -63,9 +63,12 @@ export const canvas = {
   removeFrame,
   updateFrame,
   getFrames: () => [...frames.values()].map((f) => f.state),
+  getDraftingFrameEls,
   reloadFrame,
   setFrameDrafting,
   setDrafting,
+  setFrameFocus,
+  setFocus,
   clearAllDrafting,
   fitAll,
   setOnFramePersist(fn) { onFramePersist = fn; },
@@ -153,7 +156,24 @@ function buildFrameEl(state) {
       </div>
     </div>
     <iframe title="Preview" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"></iframe>
-    <div class="frame-overlay" aria-hidden="true"><div class="frame-overlay-spinner"></div></div>
+    <div class="frame-overlay" aria-hidden="true">
+      <div class="frame-activity" role="status">
+        <div class="fa-head">
+          <span class="frame-overlay-spinner" aria-hidden="true"></span>
+          <span class="fa-phase"></span>
+          <span class="fa-timer">00:00</span>
+        </div>
+        <div class="fa-detail"></div>
+        <div class="fa-bar" aria-hidden="true"><div class="fa-bar-fill"></div></div>
+        <div class="fa-meta">
+          <span class="fa-dot" aria-hidden="true"></span>
+          <span class="fa-conn"></span>
+          <span class="fa-sep" aria-hidden="true">·</span>
+          <span class="fa-events"></span>
+          <span class="fa-iter"></span>
+        </div>
+      </div>
+    </div>
   `;
   applyFrameBox(el, state);
   syncDeviceButtons(el, state.device);
@@ -228,9 +248,37 @@ function setFrameDrafting(id, on) {
   if (frame) frame.el.classList.toggle("drafting", on);
 }
 
+/**
+ * Toggle the turn-focus state: the frame the AI is currently working on.
+ * The activity card follows this state and stays for the WHOLE turn (the AI
+ * reads/greps/thinks between edits — the card must not blink away then),
+ * while plain .drafting marks every frame touched this turn.
+ */
+function setFocus(file, on) {
+  for (const frame of frames.values()) {
+    if (frame.state.file === file) frame.el.classList.toggle("frame-focus", on);
+  }
+}
+
+function setFrameFocus(id, on) {
+  const frame = frames.get(id);
+  if (frame) frame.el.classList.toggle("frame-focus", on);
+}
+
 /** Clear the drafting state on every frame (safety net at turn end). */
 function clearAllDrafting() {
-  for (const frame of frames.values()) frame.el.classList.remove("drafting");
+  for (const frame of frames.values()) {
+    frame.el.classList.remove("drafting", "frame-focus");
+  }
+}
+
+/** Frames currently in drafting state, with their DOM elements — used by the activity HUD. */
+function getDraftingFrameEls() {
+  const out = [];
+  for (const frame of frames.values()) {
+    if (frame.el.classList.contains("drafting")) out.push({ state: frame.state, el: frame.el });
+  }
+  return out;
 }
 
 function reloadAll(file) {

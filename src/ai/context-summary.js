@@ -73,25 +73,32 @@ export async function summarizeHistoryRange({
       rollingSummary ? `Previous summary to update:\n${rollingSummary}` : "",
       `Conversation history segment ${index + 1} of ${chunks.length}:\n\n${chunk.map((record) => record.text).join("\n\n")}`,
     ].filter(Boolean).join("\n\n");
-    const completion = await client.complete({
-      messages: [
-        { role: "system", content: CONTEXT_SUMMARY_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-      tools: [],
-      signal,
-    });
-    const nextSummary = String(completion.message?.content || "").trim();
+    // Some providers intermittently answer with empty content; one retry
+    // avoids discarding an otherwise fine compaction checkpoint.
+    let nextSummary = "";
+    let lastUsage = null;
+    for (let attempt = 0; attempt < 2 && !nextSummary; attempt++) {
+      const completion = await client.complete({
+        messages: [
+          { role: "system", content: CONTEXT_SUMMARY_SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        tools: [],
+        signal,
+      });
+      promptTokens += completion.usage?.prompt_tokens || 0;
+      completionTokens += completion.usage?.completion_tokens || 0;
+      lastUsage = completion.usage || null;
+      nextSummary = String(completion.message?.content || "").trim();
+    }
     if (!nextSummary) throw new Error("AI tidak menghasilkan ringkasan history");
     rollingSummary = nextSummary;
-    promptTokens += completion.usage?.prompt_tokens || 0;
-    completionTokens += completion.usage?.completion_tokens || 0;
     await onChunk?.({
       summary: rollingSummary,
       upToIndex: chunk.at(-1).index,
       chunkIndex: index + 1,
       chunkCount: chunks.length,
-      usage: completion.usage || null,
+      usage: lastUsage,
     });
   }
 

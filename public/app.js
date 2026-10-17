@@ -1,4 +1,5 @@
-import { canvasView, onFrameCreated, onFrameDeleted, onPreviewUpdate, onDraftUpdate, onDraftClear, onFrameWorking, onFrameWorkingClear, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js";
+import { canvasView, onFrameCreated, onFrameDeleted, onPreviewUpdate, onDraftUpdate, onDraftClear, onFrameWorking, onFrameWorkingClear, onTurnFailed, syncUndoState, onTurnStart, onTurnDone } from "/canvas-view.js";
+import { frameActivity } from "/frame-activity.js";
 import { initTooltips, setTip } from "/tooltip.js";
 import { $, $$ } from "/dom.js";
 import { loadLanguage, saveLanguage, translate } from "/i18n.js";
@@ -1267,6 +1268,8 @@ function bindEvents() {
     if (!ui.userMenu.hidden && !ui.userMenu.contains(event.target)) toggleUserMenu(false);
   });
   $$('[data-create]').forEach((button) => button.addEventListener("click", openCreateDialog));
+  $$("[data-import-session]").forEach((button) => button.addEventListener("click", () => $("#importSessionInput")?.click()));
+  $("#importSessionInput")?.addEventListener("change", importSessionFile);
   $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => {
     // Tutup <dialog> terdekat dari tombol ini (create, export, api-settings, dsb.).
     const dialog = button.closest("dialog");
@@ -1694,6 +1697,61 @@ async function createSession(event) {
     if (!state.user) showAuthView("login");
   } finally {
     submit.disabled = false;
+  }
+}
+
+/**
+ * Import session penuh dari file .zip hasil export. Wajib login (server
+ * menolak anon dengan 401). Setelah sukses, session menjadi milik user ini
+ * dan canvas langsung terbuka.
+ */
+async function importSessionFile(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const button = $("[data-import-session]");
+  const label = button?.querySelector(".btn-label");
+  const originalLabel = label?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  if (label) label.textContent = t("importingProject");
+  try {
+    const body = await file.arrayBuffer();
+    const nameHint = file.name.replace(/\.zip$/i, "").slice(0, 80);
+    const res = await fetch(`/api/sessions/import?name=${encodeURIComponent(nameHint)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/zip" },
+      body,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || t("importFailed"));
+    }
+    const session = await res.json();
+    // File aset (tanpa manifest session) diimpor sebagai project baru tanpa
+    // history chat — beri tahu user secara eksplisit supaya tidak bingung.
+    if (session.importedFrom === "assets") notify(t("importedNoHistory"));
+    // Segarkan daftar project, lalu buka session hasil import → langsung masuk canvas.
+    try {
+      const sessions = await api("/api/sessions");
+      state.sessions = sessions;
+      renderSessions();
+    } catch {
+      // daftar gagal diperbarui — buka tetap session hasil import.
+    }
+    location.hash = `session=${session.id}`;
+  } catch (error) {
+    notify(error.message, true);
+    if (/login/i.test(error.message)) showAuthView("login");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+    if (label && originalLabel) label.textContent = originalLabel;
   }
 }
 
@@ -2245,7 +2303,9 @@ async function sendPrompt(event) {
     if (!response.ok) {
       throw new Error((await response.json()).error || t("requestFailed", { status: response.status }));
     }
+    frameActivity.turnStart();
     await readNdjson(response.body, (eventData) => {
+      frameActivity.track(eventData);
       if (eventData.type === "assistant_start") {
         setWorkspaceStatus("working", "assistantPreparing");
         ensureAssistantTurn();
@@ -2379,7 +2439,8 @@ async function sendPrompt(event) {
     finalizeAssistantTurn(turn);
     setWorkspaceStatus(stopRequested ? "ready" : "error", stopRequested ? "statusStopped" : "statusError");
     if (!stopRequested) notify(error.message, true);
-    onTurnDone();
+    if (stopRequested) onTurnDone();
+    else onTurnFailed(error.message);
     refreshPreview();
   } finally {
     state.running = false;

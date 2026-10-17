@@ -1,5 +1,27 @@
 import { withAppIdentityHeaders } from "../config/app-headers.js";
 
+// Some providers buffer the whole tool call and stay silent on the wire for
+// many minutes while generating a large payload. Node's global fetch (its
+// internally bundled undici) drops a response body after ~300s without
+// chunks, which would surface as a spurious network error mid-generation.
+// When the undici package is available, use its own fetch + an Agent with
+// bodyTimeout disabled so the stream stays open as long as the provider
+// keeps the connection. (The dispatcher MUST come from the same undici
+// instance as the fetch — mixing versions throws "invalid onRequestStart".)
+const { streamFetch, streamDispatcher } = await loadStreamFetch();
+
+async function loadStreamFetch() {
+  try {
+    const { fetch: undiciFetch, Agent } = await import("undici");
+    return {
+      streamFetch: undiciFetch,
+      streamDispatcher: new Agent({ bodyTimeout: 0, headersTimeout: 600_000 }),
+    };
+  } catch {
+    return { streamFetch: globalThis.fetch.bind(globalThis), streamDispatcher: undefined };
+  }
+}
+
 export class DeepSeekClient {
   constructor({ apiKey, baseUrl, model, reasoningEffort = "none", maxOutputTokens = 200000 }) {
     this.apiKey = apiKey;
@@ -11,7 +33,7 @@ export class DeepSeekClient {
 
   async complete({ messages, tools, signal, onContent, onToolCall }) {
     if (!this.apiKey) throw new Error("PRIMARY_API_KEY belum dikonfigurasi di file .env");
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await streamFetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: withAppIdentityHeaders({
         "Content-Type": "application/json",
@@ -30,6 +52,7 @@ export class DeepSeekClient {
           : {}),
       }),
       signal,
+      ...(streamDispatcher ? { dispatcher: streamDispatcher } : {}),
     });
 
     if (!response.ok) {

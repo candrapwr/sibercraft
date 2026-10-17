@@ -157,9 +157,32 @@
 .frame-devices:focus-within, .canvas-frame:focus-within .frame-hud { opacity: 1; pointer-events: auto; }
 .canvas-frame.drafting { outline-color: #8acbab; box-shadow: 0 0 0 4px #91d9b51c, 0 20px 50px #305f4810; }
 .canvas-frame.drafting .frame-label { color: #67b18c; background: #eafaf2; border-color: #d0efe0; }
-.canvas-frame.drafting .frame-overlay { background: #f4fdf866; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); border: 2px solid #abe6c8; animation: studio-edge-pulse 2s ease-in-out infinite; }
-.frame-overlay-spinner { display: block; width: 27px; height: 27px; border: 2px solid #68d59f44; border-top-color: #68d59f; box-shadow: 0 2px 8px #305f4818; }
-.canvas-controls { left: 50%; bottom: 22px; transform: translateX(-50%); gap: 4px; padding: 6px; background: #fff; border: 1px solid #dfeae4; border-radius: 12px; box-shadow: 0 5px 18px #2947380c; }
+.canvas-frame.frame-focus { outline-color: #8acbab; box-shadow: 0 0 0 4px #91d9b51c, 0 20px 50px #305f4810; }
+.canvas-frame.frame-focus .frame-overlay { background: #f4fdf866; backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); border: 2px solid #abe6c8; animation: studio-edge-pulse 2s ease-in-out infinite; }
+.canvas-frame.frame-error .frame-overlay { background: #fdf6f599; border-color: #e8b8b4; animation: none; }
+.canvas-frame.frame-done .frame-overlay { background: #f2fcf799; border-color: #b2e8cc; animation: none; }
+/* Kartu aktivitas AI — tema studio hijau. */
+.frame-activity { border-color: #c9ecd9; background: #ffffffea; box-shadow: 0 8px 26px #245e4114, 0 2px 6px #245e410a; }
+.frame-overlay-spinner { display: block; width: 13px; height: 13px; border: 2px solid #68d59f44; border-top-color: #68d59f; box-shadow: 0 2px 8px #305f4818; }
+.fa-phase { color: #1f6b4c; }
+.fa-timer { background: #e5f8ee; color: #3c8f68; }
+.fa-detail { color: #5f7d6f; }
+.fa-bar { background: #e3efe9; }
+.fa-bar-fill { background: linear-gradient(90deg, #4cc58c, #8ee7b6); }
+.fa-meta { color: #7b9a8b; }
+.fa-conn { color: #4d9a74; }
+.frame-activity.is-waiting .fa-phase { color: #8a6d1f; }
+.frame-activity.is-waiting .fa-dot { background: #e0b94e; }
+.frame-activity.is-done { border-color: #b2e8cc; }
+.frame-activity.is-done .fa-phase { color: #2e8659; }
+.frame-activity.is-stopped .fa-phase { color: #7d867e; }
+.frame-activity.is-stopped .fa-dot { background: #b3bab2; }
+.frame-activity.is-error { border-color: #e3b7b1; }
+.frame-activity.is-error .fa-phase { color: #a34b40; }
+.frame-activity.is-error .fa-detail { color: #9c5a50; }
+.frame-activity.is-error .fa-dot { background: #cf5b4d; }
+.frame-activity.is-error .fa-timer { background: #f9e9e6; color: #a3554a; }
+.canvas-controls { top: 22px; right: 22px; bottom: auto; left: auto; flex-direction: column; transform: none; gap: 4px; padding: 6px; background: #fff; border: 1px solid #dfeae4; border-radius: 12px; box-shadow: 0 5px 18px #2947380c; }
 .canvas-controls button { width: 32px; height: 30px; border-radius: 7px; color: #899f94; }
 .canvas-controls button:hover { background: #ecf9f2; color: #60a984; }
 .canvas-controls .zoom-label { font: 11px var(--sans); font-variant-numeric: tabular-nums; color: #849b90; }
@@ -211,7 +234,7 @@
   .chat-panel-heading { padding: 15px; min-height: 68px; }
   .chat-messages { padding: 18px 16px; }
   .canvas-surface-label { left: 42px; }
-  .canvas-controls { bottom: 16px; }
+  .canvas-controls { top: 14px; right: 14px; }
   .canvas-empty-hint { width: 78%; }
   .canvas-view-header .header-button span { display: none; }
 }

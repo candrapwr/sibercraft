@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optimizeContext, renderSignature } from "../src/ai/context-optimize.js";
+import { foldKeptTurnsForBudget, optimizeContext, renderSignature } from "../src/ai/context-optimize.js";
 
 test("renderSignature merangkum argumen tool tanpa payload besar", () => {
   assert.equal(
@@ -64,4 +64,97 @@ test("jawaban assistant tanpa tool diberi penanda bahwa operasi belum terbukti",
     { role: "assistant", content: "Selesai." },
   ], { enabled: true, mode: "summary" });
   assert.match(optimized.messages[1].content, /^\[ASSISTANT_NO_TOOL_EVIDENCE\]/);
+});
+
+function turnFixture(userText, resultChars) {
+  return [
+    { role: "user", content: userText },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        { id: `call_${userText}`, function: { name: "grep", arguments: JSON.stringify({ path: "index.html", pattern: "render" }) } },
+      ],
+    },
+    { role: "tool", tool_call_id: `call_${userText}`, name: "grep", content: `[TOOL_STATUS=SUCCESS] grep: ${"x".repeat(resultChars)}` },
+    { role: "assistant", content: "Sudah saya periksa." },
+  ];
+}
+
+test("foldKeptTurnsForBudget: di bawah budget tidak mengubah apa pun", () => {
+  const messages = [...turnFixture("turn satu", 100), ...turnFixture("turn dua", 100)];
+  const folded = foldKeptTurnsForBudget(messages, { budgetChars: 10_000 });
+  assert.equal(folded.messages, messages);
+  assert.equal(folded.stats.charsSaved, 0);
+});
+
+test("foldKeptTurnsForBudget: turn lama di-fold jadi [SUMMARY], turn terakhir utuh", () => {
+  const messages = [...turnFixture("turn satu", 5_000), ...turnFixture("turn dua", 200)];
+  const folded = foldKeptTurnsForBudget(messages, { budgetChars: 3_000 });
+
+  assert.ok(folded.stats.charsSaved > 0);
+  assert.equal(folded.stats.foldedTurns, 1);
+  // Turn satu jadi satu pesan user berisi digest, tanpa sisa pesan tool.
+  const firstUser = folded.messages[0];
+  assert.equal(firstUser.role, "user");
+  assert.match(firstUser.content, /turn satu/);
+  assert.match(firstUser.content, /\[SUMMARY\]\ngrep\("index\.html", "render"\) → SUCCESS/);
+  assert.equal(folded.messages.filter((message) => message.role === "tool").length, 1,
+    "hanya hasil tool turn terakhir yang tetap utuh");
+  // Turn terakhir tidak disentuh.
+  assert.deepEqual(folded.messages.at(-3), messages.at(-3));
+  assert.deepEqual(folded.messages.at(-2), messages.at(-2));
+  assert.deepEqual(folded.messages.at(-1), messages.at(-1));
+});
+
+test("foldKeptTurnsForBudget: turn terakhir raksasa hanya dilipat di bagian awal", () => {
+  const rounds = [];
+  for (let index = 0; index < 5; index++) {
+    rounds.push(
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          { id: `call_r${index}`, function: { name: "grep", arguments: JSON.stringify({ pattern: `p${index}` }) } },
+        ],
+      },
+      { role: "tool", tool_call_id: `call_r${index}`, name: "grep", content: `[TOOL_STATUS=SUCCESS] grep: ${"y".repeat(4_000)}` },
+    );
+  }
+  const messages = [{ role: "user", content: "perbaiki semua" }, ...rounds];
+  const folded = foldKeptTurnsForBudget(messages, { budgetChars: 3_000, keepRecentRounds: 2 });
+
+  const toolMessages = folded.messages.filter((message) => message.role === "tool");
+  assert.equal(toolMessages.length, 2, "dua round terakhir dipertahankan");
+  assert.match(folded.messages[0].content, /\[SUMMARY\]/);
+  assert.match(folded.messages[0].content, /turn dihentikan|perbaiki semua/);
+  // Protokol tool tetap valid: setiap assistant ber-tool_calls diikuti hasilnya.
+  for (let index = 0; index < folded.messages.length; index++) {
+    const message = folded.messages[index];
+    if (message.role === "assistant" && message.tool_calls?.length) {
+      assert.equal(folded.messages[index + 1]?.tool_call_id, message.tool_calls[0].id);
+    }
+  }
+});
+
+test("foldKeptTurnsForBudget: hasil tool pada round yang dipertahankan dipotong bila raksasa", () => {
+  const rounds = [];
+  for (let index = 0; index < 4; index++) {
+    rounds.push(
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          { id: `call_c${index}`, function: { name: "read_file", arguments: JSON.stringify({ path: "index.html" }) } },
+        ],
+      },
+      { role: "tool", tool_call_id: `call_c${index}`, name: "read_file", content: "[TOOL_STATUS=SUCCESS] read_file: " + "z".repeat(50_000) },
+    );
+  }
+  const messages = [{ role: "user", content: "baca semua" }, ...rounds];
+  const folded = foldKeptTurnsForBudget(messages, { budgetChars: 1_000, keepRecentRounds: 1, maxToolResultChars: 5_000 });
+  const keptTool = folded.messages.find((message) => message.role === "tool");
+  assert.ok(keptTool.content.length < 10_000);
+  assert.match(keptTool.content, /hasil dipotong/);
+  assert.equal(folded.stats.clippedResults >= 1, true);
 });

@@ -5,6 +5,7 @@
 //   from the chat stream, and persists frame position changes to the server.
 
 import { canvas } from "/canvas.js";
+import { frameActivity } from "/frame-activity.js";
 import { setTip } from "/tooltip.js";
 import { translate } from "/i18n.js";
 
@@ -60,7 +61,7 @@ function init() {
   dockToggleEl?.addEventListener("click", toggleDock);
   $("#cvUndoButton")?.addEventListener("click", undoFromCanvas);
   $("#cvBackButton")?.addEventListener("click", leave);
-  $("#cvExportAllButton")?.addEventListener("click", exportAll);
+  $("#cvExportSessionButton")?.addEventListener("click", exportSessionArchive);
   $("#cvThumbButton")?.addEventListener("click", regenerateThumbnail);
 
   // Export hooks used by canvas.js HUD.
@@ -135,6 +136,8 @@ function leave() {
   draftLastAt.clear();
   if (fitTimer) { clearTimeout(fitTimer); fitTimer = null; }
   activeDraftPath = null;
+  turnActive = false;
+  focusTarget = null;
 
   // Restore chat-panel to its original home.
   if (chatPanel && chatHome) {
@@ -244,6 +247,12 @@ export function onPreviewUpdate(path) {
       activeDraftPath = path;
       canvas._internal.zoomToFrame(matches[0].id);
     }
+    // A final write means this frame is being worked on this turn: mark it
+    // and hand it the activity card until the turn ends.
+    if (matches.length) {
+      canvas.setDrafting(path, true);
+      setTurnFocus(matches[0]);
+    }
   }
 }
 
@@ -265,6 +274,7 @@ export function onDraftUpdate(path) {
   const matches = canvas.getFrames().filter((f) => f.file === path);
   if (!matches.length) return;
   canvas.setDrafting(path, true);
+  setTurnFocus(matches[0]);
   // Focus follows the file currently being drafted. When the AI moves on to
   // a different file, zoom into that frame instead. Debounced so rapid
   // back-to-back drafts of the same file don't re-trigger the animation.
@@ -312,9 +322,13 @@ export function onFrameWorking(frameId, path) {
   if (!matches.length) return;
   if (frameId && matches.some((frame) => frame.id === frameId)) {
     canvas.setFrameDrafting(frameId, true);
-  } else {
+  } else if (path) {
     canvas.setDrafting(path, true);
   }
+  // The focus frame carries the activity card for the rest of the turn —
+  // the AI keeps working between edits (reads, searches, thinking) and the
+  // card must stay visible instead of blinking away after each edit.
+  setTurnFocus(matches[0], frameId);
   const focusPath = matches[0].file || path;
   if (activeDraftPath !== focusPath) {
     activeDraftPath = focusPath;
@@ -322,19 +336,46 @@ export function onFrameWorking(frameId, path) {
   }
 }
 
-/** Clear tool activity; final file reloads arrive through preview/preview_draft_clear. */
+/**
+ * Clear tool activity. While a turn is running this intentionally keeps the
+ * frame marked (outline + activity card): the clear only means "this write/
+ * edit finished", not "work on the frame is done". The card's own phase text
+ * switches to reading/searching/waiting between edits. Full clearing happens
+ * at turn end (onTurnDone/onTurnFailed).
+ */
 export function onFrameWorkingClear(frameId, path) {
   if (!inCanvas) return;
+  if (turnActive) return;
   if (frameId && canvas.getFrames().some((frame) => frame.id === frameId)) {
     canvas.setFrameDrafting(frameId, false);
+    canvas.setFrameFocus(frameId, false);
   } else if (path) {
     canvas.setDrafting(path, false);
+    canvas.setFocus(path, false);
   }
+}
+
+// Turn-scoped focus tracking: which frame currently carries the activity card.
+let turnActive = false;
+let focusTarget = null; // { id?, file? }
+
+function setTurnFocus(frame, preferredId) {
+  const next = preferredId || frame?.id ? { id: preferredId || frame.id } : frame?.file ? { file: frame.file } : null;
+  if (!next) return;
+  const key = next.id ? `id:${next.id}` : `file:${next.file}`;
+  const prevKey = focusTarget ? (focusTarget.id ? `id:${focusTarget.id}` : `file:${focusTarget.file}`) : null;
+  if (prevKey === key) return;
+  if (focusTarget?.id) canvas.setFrameFocus(focusTarget.id, false);
+  else if (focusTarget?.file) canvas.setFocus(focusTarget.file, false);
+  focusTarget = next;
+  if (next.id) canvas.setFrameFocus(next.id, true);
+  else if (next.file) canvas.setFocus(next.file, true);
 }
 
 /** Called when a new AI turn starts — reset focus tracking & cancel pending fit. */
 export function onTurnStart() {
   activeDraftPath = null;
+  turnActive = true;
   if (fitTimer) { clearTimeout(fitTimer); fitTimer = null; }
 }
 
@@ -342,6 +383,9 @@ export function onTurnStart() {
 export function onTurnDone() {
   if (!inCanvas) return;
   activeDraftPath = null;
+  turnActive = false;
+  focusTarget = null;
+  frameActivity.finish(true);
   // Safety net: clear any drafting state that may have been left on frames
   // (e.g. a preview_draft_clear that didn't arrive, or a race with the final
   // force-flush). Guarantees no frame stays stuck in "drafting" after a turn.
@@ -352,6 +396,21 @@ export function onTurnDone() {
     fitTimer = null;
     if (inCanvas) canvas._internal.zoomToFit();
   }, 250);
+}
+
+/**
+ * Called when the turn failed — same cleanup as onTurnDone, but the activity
+ * card flashes a failure state (red) on the frames that were being worked on,
+ * so the user immediately sees the preview stopped because of an error.
+ */
+export function onTurnFailed(message = "") {
+  if (!inCanvas) return;
+  activeDraftPath = null;
+  turnActive = false;
+  focusTarget = null;
+  frameActivity.finish(false, message || "error");
+  canvas.clearAllDrafting();
+  for (const file of [...draftTimers.keys()]) onDraftClear(file);
 }
 
 async function persistFrame({ action, id, x, y, device }) {
@@ -417,19 +476,19 @@ async function exportFrameHtml(state) {
   }
 }
 
-/** Export the ENTIRE workspace (all files + per-frame screenshots) as a ZIP. */
-async function exportAll() {
+/** Export the FULL session (files + screenshots + chat history) in one ZIP. */
+async function exportSessionArchive() {
   if (!session) return;
-  const btn = document.getElementById("cvExportAllButton");
+  const btn = document.getElementById("cvExportSessionButton");
   const restoreButton = beginHeaderAction(btn, "exportPreparing");
   try {
-    const res = await fetch(`/api/sessions/${session.id}/export/zip-all`);
-    if (!res.ok) throw new Error("Export All gagal");
+    const res = await fetch(`/api/sessions/${session.id}/export/session`);
+    if (!res.ok) throw new Error("Export gagal");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${session.name || "project"}.zip`;
+    a.download = `${(session.name || "project").replace(/[^\w\u00C0-\u024F.-]+/g, "-")}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
